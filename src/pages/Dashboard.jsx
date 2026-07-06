@@ -2,6 +2,7 @@
 // 1. IMPORTS
 // ============================================================
 import React, { useState, useEffect } from 'react'
+import { useTheme } from '../context/ThemeContext'
 import { supabase } from '../lib/supabase'
 import Navbar from '../components/Navbar'
 import MockChatbot from '../components/MockChatbot'
@@ -16,6 +17,10 @@ import TripCalendar from '../components/TripCalendar'
 import PackingList from '../components/PackingList'
 import TripCountdown from '../components/TripCountdown'
 import { motion } from 'framer-motion'
+import WeatherWidget from '../components/WeatherWidget'
+import AdminDashboard from './AdminDashboard'
+import UserBookings from '../components/UserBookings'
+import UserTourPackages from '../components/UserTourPackages'
 
 // ============================================================
 // 2. MAIN COMPONENT
@@ -24,40 +29,37 @@ function Dashboard() {
   // ============================================================
   // 2.1 STATE VARIABLES
   // ============================================================
-  // 🔹 User & Trips
-  const [user, setUser] = useState(null)           // Current logged-in user
-  const [trips, setTrips] = useState([])           // User's saved trips
-  const [loading, setLoading] = useState(true)     // Loading state
-
-  // 🔹 Page Views (Switch between different pages)
-  const [showTripGenerator, setShowTripGenerator] = useState(false)           // Show trip planner
-  const [showOperatorRegistration, setShowOperatorRegistration] = useState(false) // Show operator signup
-  const [showProfile, setShowProfile] = useState(false)                       // Show profile page
-  const [showMap, setShowMap] = useState(false)                               // Show map view
-  const [showCalendar, setShowCalendar] = useState(false)                     // Show calendar view
-
-  // 🔹 Trip-specific modals
-  const [shareTrip, setShareTrip] = useState(null)              // Which trip to share
-  const [selectedTripForChat, setSelectedTripForChat] = useState(null)       // Chat for a specific trip
-  const [selectedTripForPhotos, setSelectedTripForPhotos] = useState(null)   // Photos for a specific trip
-  const [selectedTripForPacking, setSelectedTripForPacking] = useState(null) // Packing list for a specific trip
+  const [user, setUser] = useState(null)
+  const [trips, setTrips] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showTripGenerator, setShowTripGenerator] = useState(false)
+  const [showOperatorRegistration, setShowOperatorRegistration] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
+  const [shareTrip, setShareTrip] = useState(null)
+  const [selectedTripForChat, setSelectedTripForChat] = useState(null)
+  const [showMap, setShowMap] = useState(false)
+  const [selectedTripForPhotos, setSelectedTripForPhotos] = useState(null)
+  const [showCalendar, setShowCalendar] = useState(false)
+  const [selectedTripForPacking, setSelectedTripForPacking] = useState(null)
+  const { darkMode } = useTheme()
+  const [showAdmin, setShowAdmin] = useState(false)
+const [showBookings, setShowBookings] = useState(false)
+const [showTourPackages, setShowTourPackages] = useState(false)
 
   // ============================================================
-  // 2.2 FETCH USER DATA (Runs once on component mount)
+  // 2.2 FETCH USER DATA
   // ============================================================
   useEffect(() => {
     const getUser = async () => {
-      // Get the current logged-in user
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
       
-      // If user is logged in, fetch their trips
       if (user) {
         const { data, error } = await supabase
           .from('trips')
           .select('*')
-          .eq('user_id', user.id)           // Filter trips by user ID
-          .order('created_at', { ascending: false }) // Newest first
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
         
         if (!error) {
           setTrips(data || [])
@@ -67,19 +69,16 @@ function Dashboard() {
     }
     
     getUser()
-  }, []) // Empty dependency array = runs once
+  }, [])
 
   // ============================================================
   // 2.3 HELPER FUNCTIONS
   // ============================================================
-  
-  // 🔹 Logout function
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    window.location.reload() // Refresh page to clear state
+    window.location.reload()
   }
 
-  // 🔹 Refresh trips list (called after saving a new trip)
   const loadTrips = async () => {
     if (!user) return
     const { data, error } = await supabase
@@ -103,7 +102,7 @@ function Dashboard() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#f0f4ff'
+        background: darkMode ? '#0f0f1a' : '#f5f3ff'
       }}>
         <div style={{ textAlign: 'center' }}>
           <motion.div
@@ -113,8 +112,8 @@ function Dashboard() {
           >
             🌍
           </motion.div>
-          <p style={{ color: '#8B5CF6', fontWeight: '500', marginTop: '1rem' }}>
-            Loading your dashboard...
+          <p style={{ color: darkMode ? '#a1a1aa' : '#1a1a2e', fontWeight: '500', marginTop: '1rem' }}>
+            Loading your adventure...
           </p>
         </div>
       </div>
@@ -122,11 +121,10 @@ function Dashboard() {
   }
 
   // ============================================================
-  // 2.5 PAGE VIEWS (Conditions that render different pages)
+  // 2.5 PAGE VIEWS (Conditions)
   // ============================================================
 
-  // 🔹 CONDITION 1: Show Trip Generator
-  // When user clicks "New Trip" button
+  // ---- Page: Trip Generator ----
   if (showTripGenerator) {
     return (
       <div>
@@ -136,52 +134,31 @@ function Dashboard() {
     )
   }
 
-  // 🔹 CONDITION 2: Show Profile Page
-  // When user clicks "My Profile" button
+  // ---- Page: Profile ----
   if (showProfile) {
     return <Profile user={user} onLogout={handleLogout} />
   }
 
-  // 🔹 CONDITION 3: Show Operator Registration
-  // When user clicks "Become an Operator" button
+  // ---- Page: Operator Registration ----
   if (showOperatorRegistration) {
     return (
       <div>
         <Navbar user={user} onLogout={handleLogout} />
         <div style={{
           minHeight: '100vh',
-          backgroundImage: 'url(https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1600)',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
-          backgroundAttachment: 'fixed',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
           padding: '2rem',
           position: 'relative'
         }}>
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.4)',
-            zIndex: 0
-          }} />
-          <div style={{
-            position: 'relative',
-            zIndex: 1,
-            maxWidth: '600px',
-            margin: '0 auto',
-            paddingTop: '2rem'
-          }}>
-            {/* Back Button */}
+          <div style={{ maxWidth: '600px', margin: '0 auto', paddingTop: '2rem' }}>
             <button
               onClick={() => setShowOperatorRegistration(false)}
               style={{
-                background: 'white',
+                background: 'transparent',
+                color: darkMode ? '#a1a1aa' : '#1a1a2e',
+                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
                 padding: '0.5rem 1.5rem',
                 borderRadius: '8px',
-                border: 'none',
                 cursor: 'pointer',
                 marginBottom: '1rem',
                 fontWeight: '600'
@@ -196,32 +173,30 @@ function Dashboard() {
     )
   }
 
-  // 🔹 CONDITION 4: Show Trip Share Modal
-  // When user clicks "Share" button on a trip
+  // ---- Modal: Share Trip ----
   if (shareTrip) {
     return <TripShare trip={shareTrip} onClose={() => setShareTrip(null)} />
   }
 
-  // 🔹 CONDITION 5: Show Trip Photos
-  // When user clicks "Photos" button on a trip
+  // ---- Page: Trip Photos ----
   if (selectedTripForPhotos) {
     return (
       <div>
         <Navbar user={user} onLogout={handleLogout} />
         <div style={{
           minHeight: '100vh',
-          background: '#f0f4ff',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
           padding: '2rem'
         }}>
           <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-            {/* Back Button */}
             <button
               onClick={() => setSelectedTripForPhotos(null)}
               style={{
-                background: 'white',
+                background: 'transparent',
+                color: darkMode ? '#a1a1aa' : '#1a1a2e',
+                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
                 padding: '0.5rem 1.5rem',
                 borderRadius: '8px',
-                border: 'none',
                 cursor: 'pointer',
                 marginBottom: '1rem',
                 fontWeight: '600'
@@ -230,17 +205,13 @@ function Dashboard() {
               ← Back to Dashboard
             </button>
             <div style={{
-              background: 'white',
-              padding: '2rem',
-              borderRadius: '20px',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.06)'
+              background: darkMode ? '#1a1a2e' : 'white',
+              borderRadius: '16px',
+              padding: '1.5rem',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+              border: '1px solid rgba(26, 43, 60, 0.06)'
             }}>
-              <h2 style={{
-                fontSize: '24px',
-                fontWeight: '700',
-                marginBottom: '0.5rem',
-                color: '#1a1a2e'
-              }}>
+              <h2 style={{ fontSize: '24px', marginBottom: '0.5rem', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
                 📸 {selectedTripForPhotos.destination} Photos
               </h2>
               <TripPhotos trip={selectedTripForPhotos} user={user} />
@@ -251,46 +222,26 @@ function Dashboard() {
     )
   }
 
-  // 🔹 CONDITION 6: Show Group Chat
-  // When user clicks "Chat" button on a trip
+  // ---- Page: Group Chat ----
   if (selectedTripForChat) {
     return (
       <div>
         <Navbar user={user} onLogout={handleLogout} />
         <div style={{
           minHeight: '100vh',
-          backgroundImage: 'url(https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1600)',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
-          backgroundAttachment: 'fixed',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
           padding: '2rem',
           position: 'relative'
         }}>
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.4)',
-            zIndex: 0
-          }} />
-          <div style={{
-            position: 'relative',
-            zIndex: 1,
-            maxWidth: '700px',
-            margin: '0 auto',
-            paddingTop: '2rem'
-          }}>
-            {/* Back Button */}
+          <div style={{ maxWidth: '700px', margin: '0 auto', paddingTop: '2rem' }}>
             <button
               onClick={() => setSelectedTripForChat(null)}
               style={{
-                background: 'white',
+                background: 'transparent',
+                color: darkMode ? '#a1a1aa' : '#1a1a2e',
+                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
                 padding: '0.5rem 1.5rem',
                 borderRadius: '8px',
-                border: 'none',
                 cursor: 'pointer',
                 marginBottom: '1rem',
                 fontWeight: '600'
@@ -305,15 +256,14 @@ function Dashboard() {
     )
   }
 
-  // 🔹 CONDITION 7: Show Map View
-  // When user clicks "View Map" button
+  // ---- Page: Map View ----
   if (showMap) {
     return (
       <div>
         <Navbar user={user} onLogout={handleLogout} />
         <div style={{
           minHeight: '100vh',
-          background: '#f0f4ff',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
           padding: '2rem'
         }}>
           <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
@@ -325,34 +275,19 @@ function Dashboard() {
               flexWrap: 'wrap',
               gap: '0.5rem'
             }}>
-              <h1 style={{
-                fontSize: '28px',
-                fontWeight: '700',
-                color: '#1a1a2e',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}>
+              <h1 style={{ fontSize: '28px', fontWeight: '700', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
                 🗺️ Your Trips Map
               </h1>
-              {/* Back Button */}
               <button
                 onClick={() => setShowMap(false)}
                 style={{
+                  background: 'transparent',
+                  color: darkMode ? '#a1a1aa' : '#1a1a2e',
+                  border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
                   padding: '0.5rem 1.5rem',
-                  background: 'white',
-                  color: '#1a1a2e',
-                  border: '1px solid #ddd',
                   borderRadius: '8px',
                   cursor: 'pointer',
-                  fontWeight: '600',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = '#f3f4f6'
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'white'
+                  fontWeight: '600'
                 }}
               >
                 ← Back to Dashboard
@@ -360,13 +295,14 @@ function Dashboard() {
             </div>
             {trips.length === 0 ? (
               <div style={{
-                background: 'white',
+                background: darkMode ? '#1a1a2e' : 'white',
+                borderRadius: '16px',
                 padding: '3rem 2rem',
-                borderRadius: '20px',
-                textAlign: 'center'
+                textAlign: 'center',
+                border: '2px dashed rgba(26, 43, 60, 0.1)'
               }}>
                 <span style={{ fontSize: '48px' }}>🗺️</span>
-                <h3 style={{ marginTop: '1rem' }}>No trips to show</h3>
+                <h3 style={{ marginTop: '1rem', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>No trips to show</h3>
                 <p style={{ color: '#6b7280' }}>Create a trip first to see it on the map!</p>
               </div>
             ) : (
@@ -378,26 +314,25 @@ function Dashboard() {
     )
   }
 
-  // 🔹 CONDITION 8: Show Calendar View
-  // When user clicks "Calendar" button
+  // ---- Page: Calendar View ----
   if (showCalendar) {
     return (
       <div>
         <Navbar user={user} onLogout={handleLogout} />
         <div style={{
           minHeight: '100vh',
-          background: '#f0f4ff',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
           padding: '2rem'
         }}>
           <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-            {/* Back Button */}
             <button
               onClick={() => setShowCalendar(false)}
               style={{
-                background: 'white',
+                background: 'transparent',
+                color: darkMode ? '#a1a1aa' : '#1a1a2e',
+                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
                 padding: '0.5rem 1.5rem',
                 borderRadius: '8px',
-                border: 'none',
                 cursor: 'pointer',
                 marginBottom: '1rem',
                 fontWeight: '600'
@@ -412,87 +347,135 @@ function Dashboard() {
     )
   }
 
-  // 🔹 CONDITION 9: Show Packing List
-  // When user clicks "Packing" button on a trip
-  if (selectedTripForPacking) {
-    return (
-      <div>
-        <Navbar user={user} onLogout={handleLogout} />
-        <div style={{
-          minHeight: '100vh',
-          background: '#f0f4ff',
-          padding: '2rem'
-        }}>
-          <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-            {/* Back Button */}
-            <button
-              onClick={() => setSelectedTripForPacking(null)}
-              style={{
-                background: 'white',
-                padding: '0.5rem 1.5rem',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                marginBottom: '1rem',
-                fontWeight: '600'
-              }}
-            >
-              ← Back to Dashboard
-            </button>
-            <PackingList trip={selectedTripForPacking} />
-          </div>
+  // ---- Page: Packing List ----
+if (selectedTripForPacking) {
+  return (
+    <div>
+      <Navbar user={user} onLogout={handleLogout} />
+      <div style={{
+        minHeight: '100vh',
+        background: darkMode ? '#0f0f1a' : '#f5f3ff',
+        padding: '2rem'
+      }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+          <PackingList 
+            trip={selectedTripForPacking} 
+            onBack={() => setSelectedTripForPacking(null)} 
+          />
         </div>
       </div>
-    )
-  }
+    </div>
+  )
+}
+
+// ---- Page: Admin Dashboard ----
+if (showAdmin) {
+  return <AdminDashboard user={user} onLogout={handleLogout} />
+}
+
+// ---- Page: ShowBookings ----
+if (showBookings) {
+  return (
+    <div>
+      <Navbar user={user} onLogout={handleLogout} />
+      <div style={{
+        minHeight: '100vh',
+        background: darkMode ? '#0f0f1a' : '#f5f3ff',
+        padding: '2rem'
+      }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+          <button
+            onClick={() => setShowBookings(false)}
+            style={{
+              background: 'transparent',
+              color: darkMode ? '#a1a1aa' : '#1a1a2e',
+              border: '2px solid #1a1a2e',
+              padding: '0.5rem 1.5rem',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              marginBottom: '1rem',
+              fontWeight: '600'
+            }}
+          >
+            ← Back to Dashboard
+          </button>
+          <UserBookings user={user} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ---- Page: ShowTourPackages ----
+if (showTourPackages) {
+  return (
+    <div>
+      <Navbar user={user} onLogout={handleLogout} />
+      <div style={{
+        minHeight: '100vh',
+        background: darkMode ? '#0f0f1a' : '#f5f3ff',
+        padding: '2rem'
+      }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+          <button
+            onClick={() => setShowTourPackages(false)}
+            style={{
+              background: 'transparent',
+              color: darkMode ? '#a1a1aa' : '#1a1a2e',
+              border: '2px solid #1a1a2e',
+              padding: '0.5rem 1.5rem',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              marginBottom: '1rem',
+              fontWeight: '600'
+            }}
+          >
+            ← Back to Dashboard
+          </button>
+          <UserTourPackages user={user} />
+        </div>
+      </div>
+    </div>
+  )
+}
 
   // ============================================================
-  // 2.6 MAIN DASHBOARD (Default view)
+  // 2.6 MAIN DASHBOARD (Default View)
   // ============================================================
   return (
     <div>
-      {/* Navbar - always visible */}
+      {/* NAVBAR */}
       <Navbar user={user} onLogout={handleLogout} />
       
-      {/* Main container with background image */}
+      {/* MAIN CONTAINER */}
       <div className="dashboard-container" style={{
         minHeight: '100vh',
-        backgroundImage: 'url(https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1600)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed',
+        background: darkMode 
+          ? 'linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%)' 
+          : 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
         padding: '2rem',
         position: 'relative'
       }}>
-        {/* Dark overlay for readability */}
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.4)',
-          zIndex: 0
-        }} />
         
-        {/* Content wrapper */}
+        {/* CONTENT WRAPPER */}
         <div style={{
           position: 'relative',
           zIndex: 1,
           maxWidth: '900px',
           margin: '0 auto'
         }}>
-          // ============================================================
-          // 2.6.1 WELCOME SECTION
-          // ============================================================
-          <div className="welcome-section" style={{
-            background: 'white',
+          
+          {/* ============================================================
+              2.6.1 WELCOME SECTION
+              ============================================================ */}
+          <div style={{
+            background: darkMode ? '#1a1a2e' : 'white',
+            borderRadius: '16px',
             padding: '2rem',
-            borderRadius: '20px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
-            marginBottom: '2rem',
-            border: '1px solid rgba(139, 92, 246, 0.08)'
+            boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+            border: '1px solid rgba(26, 43, 60, 0.06)',
+            marginBottom: '2rem'
           }}>
             <div style={{ 
               display: 'flex', 
@@ -500,31 +483,26 @@ function Dashboard() {
               gap: '1rem',
               flexWrap: 'wrap'
             }}>
-              {/* 👋 Floating welcome emoji */}
-              <span className="float-animation" style={{ fontSize: '40px' }}>👋</span>
-              
-              {/* User greeting */}
+              <span style={{ fontSize: '40px' }}>👋</span>
               <div style={{ flex: 1, minWidth: '150px' }}>
                 <h1 style={{
                   fontSize: '28px',
                   fontWeight: '700',
-                  color: '#1a1a2e',
+                  color: darkMode ? '#e4e4e7' : '#1a1a2e',
                   marginBottom: '0.25rem'
                 }}>
                   Welcome back, {user?.email?.split('@')[0] || 'Traveler'}!
                 </h1>
-                <p style={{ color: '#6b7280' }}>
+                <p style={{ color: darkMode ? '#a1a1aa' : '#6b7280' }}>
                   Ready to plan your next adventure? Let's go! ✈️
                 </p>
               </div>
-              
-              {/* 📊 Trip count badge */}
               <div style={{
-                background: '#f0f0f0',
+                background: darkMode ? '#0f0f1a' : '#f5f3ff',
                 padding: '0.5rem 1rem',
                 borderRadius: '12px',
                 fontSize: '13px',
-                color: '#6b7280',
+                color: darkMode ? '#a1a1aa' : '#1a1a2e',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem'
@@ -541,9 +519,9 @@ function Dashboard() {
             </div>
           </div>
 
-          // ============================================================
-          // 2.6.2 QUICK ACTIONS GRID (Buttons that change page view)
-          // ============================================================
+          {/* ============================================================
+              2.6.2 QUICK ACTIONS GRID
+              ============================================================ */}
           <div className="quick-actions" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -551,53 +529,56 @@ function Dashboard() {
             marginBottom: '2rem'
           }}>
             
-            // 🔹 BUTTON 1: New Trip → Shows TripGenerator
+            {/* BUTTON: New Trip */}
             <button
               onClick={() => setShowTripGenerator(true)}
               style={{
-                background: 'white',
+                background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
+                color: 'white',
+                border: 'none',
                 padding: '1.5rem',
                 borderRadius: '16px',
-                border: '1px solid rgba(139, 92, 246, 0.08)',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                textAlign: 'left',
+                width: '100%',
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                textAlign: 'left'
+                transition: 'all 0.2s ease'
               }}
               onMouseEnter={(e) => {
                 e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.12)'
+                e.target.style.boxShadow = '0 8px 24px rgba(232, 141, 92, 0.3)'
               }}
               onMouseLeave={(e) => {
                 e.target.style.transform = 'translateY(0)'
-                e.target.style.boxShadow = '0 4px 16px rgba(0,0,0,0.04)'
+                e.target.style.boxShadow = 'none'
               }}
             >
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>✨</span>
-              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>New Trip</h3>
-              <p style={{ fontSize: '13px', color: '#6b7280' }}>Plan with AI</p>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem', color: 'white' }}>New Trip</h3>
+              <p style={{ fontSize: '13px', opacity: 0.8, color: 'white' }}>Plan with AI</p>
             </button>
 
-            // 🔹 BUTTON 2: Become an Operator → Shows OperatorRegistration
+            {/* BUTTON: Become an Operator */}
             <button
               onClick={() => setShowOperatorRegistration(true)}
               style={{
-                background: 'white',
+                background: darkMode ? '#1a1a2e' : 'white',
+                color: darkMode ? '#e4e4e7' : '#1a1a2e',
+                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
                 padding: '1.5rem',
                 borderRadius: '16px',
-                border: '1px solid rgba(139, 92, 246, 0.08)',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                textAlign: 'left',
+                width: '100%',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
-                textAlign: 'left'
+                background: 'white'
               }}
               onMouseEnter={(e) => {
                 e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.12)'
+                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
               }}
               onMouseLeave={(e) => {
                 e.target.style.transform = 'translateY(0)'
-                e.target.style.boxShadow = '0 4px 16px rgba(0,0,0,0.04)'
+                e.target.style.boxShadow = 'none'
               }}
             >
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>🏢</span>
@@ -605,26 +586,27 @@ function Dashboard() {
               <p style={{ fontSize: '13px', color: '#6b7280' }}>List your services</p>
             </button>
 
-            // 🔹 BUTTON 3: My Profile → Shows Profile page
+            {/* BUTTON: My Profile */}
             <button
               onClick={() => setShowProfile(true)}
               style={{
-                background: 'white',
+                background: darkMode ? '#1a1a2e' : 'white',
+                color: darkMode ? '#e4e4e7' : '#1a1a2e',
+                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
                 padding: '1.5rem',
                 borderRadius: '16px',
-                border: '1px solid rgba(139, 92, 246, 0.08)',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                textAlign: 'left',
+                width: '100%',
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                textAlign: 'left'
+                transition: 'all 0.2s ease'
               }}
               onMouseEnter={(e) => {
                 e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.12)'
+                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
               }}
               onMouseLeave={(e) => {
                 e.target.style.transform = 'translateY(0)'
-                e.target.style.boxShadow = '0 4px 16px rgba(0,0,0,0.04)'
+                e.target.style.boxShadow = 'none'
               }}
             >
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>👤</span>
@@ -632,26 +614,27 @@ function Dashboard() {
               <p style={{ fontSize: '13px', color: '#6b7280' }}>Edit your info</p>
             </button>
 
-            // 🔹 BUTTON 4: View Map → Shows TripMap
+            {/* BUTTON: View Map */}
             <button
               onClick={() => setShowMap(true)}
               style={{
-                background: 'white',
+                background: darkMode ? '#1a1a2e' : 'white',
+                color: darkMode ? '#e4e4e7' : '#1a1a2e',
+                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
                 padding: '1.5rem',
                 borderRadius: '16px',
-                border: '1px solid rgba(139, 92, 246, 0.08)',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                textAlign: 'left',
+                width: '100%',
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                textAlign: 'left'
+                transition: 'all 0.2s ease'
               }}
               onMouseEnter={(e) => {
                 e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.12)'
+                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
               }}
               onMouseLeave={(e) => {
                 e.target.style.transform = 'translateY(0)'
-                e.target.style.boxShadow = '0 4px 16px rgba(0,0,0,0.04)'
+                e.target.style.boxShadow = 'none'
               }}
             >
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>🗺️</span>
@@ -659,26 +642,27 @@ function Dashboard() {
               <p style={{ fontSize: '13px', color: '#6b7280' }}>See all trips</p>
             </button>
 
-            // 🔹 BUTTON 5: Calendar → Shows TripCalendar
+            {/* BUTTON: Calendar */}
             <button
               onClick={() => setShowCalendar(true)}
               style={{
-                background: 'white',
+                background: darkMode ? '#1a1a2e' : 'white',
+                color: darkMode ? '#e4e4e7' : '#1a1a2e',
+                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
                 padding: '1.5rem',
                 borderRadius: '16px',
-                border: '1px solid rgba(139, 92, 246, 0.08)',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                textAlign: 'left',
+                width: '100%',
                 cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                textAlign: 'left'
+                transition: 'all 0.2s ease'
               }}
               onMouseEnter={(e) => {
                 e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.12)'
+                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
               }}
               onMouseLeave={(e) => {
                 e.target.style.transform = 'translateY(0)'
-                e.target.style.boxShadow = '0 4px 16px rgba(0,0,0,0.04)'
+                e.target.style.boxShadow = 'none'
               }}
             >
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📅</span>
@@ -686,51 +670,127 @@ function Dashboard() {
               <p style={{ fontSize: '13px', color: '#6b7280' }}>View your trips</p>
             </button>
 
-            // 🔹 CARD 6: Stats (Static info card)
+                             {/* BUTTON: Admin*/}
+                              <button
+                              onClick={() => setShowAdmin(true)}
+                                style={{
+                           background: 'white',
+                             padding: '1.5rem',
+                          borderRadius: '16px',
+                         border: '1px solid rgba(139, 92, 246, 0.08)',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                         cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      textAlign: 'left'
+                       }}
+  onMouseEnter={(e) => {
+    e.target.style.transform = 'translateY(-4px)'
+    e.target.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.12)'
+  }}
+  onMouseLeave={(e) => {
+    e.target.style.transform = 'translateY(0)'
+    e.target.style.boxShadow = '0 4px 16px rgba(0,0,0,0.04)'
+  }}
+>
+  <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📊</span>
+  <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>Admin Portal</h3>
+  <p style={{ fontSize: '13px', color: '#6b7280' }}>Manage your platform</p>
+</button>
+
+{/* BUTTON: ShowBookings*/}
+<button
+  onClick={() => setShowBookings(true)}
+  style={{
+    background: darkMode ? '#1a1a2e' : 'white',
+    color: darkMode ? '#e4e4e7' : '#1a1a2e',
+    border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+    padding: '1.5rem',
+    borderRadius: '16px',
+    textAlign: 'left',
+    width: '100%',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease'
+  }}
+  onMouseEnter={(e) => {
+    e.target.style.transform = 'translateY(-4px)'
+    e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+  }}
+  onMouseLeave={(e) => {
+    e.target.style.transform = 'translateY(0)'
+    e.target.style.boxShadow = 'none'
+  }}
+>
+  <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📋</span>
+  <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>My Bookings</h3>
+  <p style={{ fontSize: '13px', color: '#6b7280' }}>View and pay</p>
+</button>
+
+{/* BUTTON: ShowTourPackages */}
+<button
+  onClick={() => setShowTourPackages(true)}
+  style={{
+    background: darkMode ? '#1a1a2e' : 'white',
+    color: darkMode ? '#e4e4e7' : '#1a1a2e',
+    border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+    padding: '1.5rem',
+    borderRadius: '16px',
+    textAlign: 'left',
+    width: '100%',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease'
+  }}
+>
+  <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>🏝️</span>
+  <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>Tour Packages</h3>
+  <p style={{ fontSize: '13px', color: '#6b7280' }}>Book your adventure</p>
+</button>
+
+
+            {/* CARD: Stats */}
             <div style={{
-              background: 'white',
-              padding: '1.5rem',
+              background: darkMode ? '#1a1a2e' : 'white',
               borderRadius: '16px',
-              border: '1px solid rgba(139, 92, 246, 0.08)',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+              padding: '1.5rem',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+              border: '1px solid rgba(26, 43, 60, 0.06)',
               textAlign: 'left'
             }}>
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📊</span>
-              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>Your Stats</h3>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>Your Stats</h3>
               <p style={{ fontSize: '13px', color: '#6b7280' }}>
                 {trips.length} trip{trips.length !== 1 ? 's' : ''} planned
               </p>
             </div>
 
-            // 🔹 CARD 7: AI Assistant (Static info card)
+            {/* CARD: AI Assistant */}
             <div style={{
-              background: 'white',
-              padding: '1.5rem',
+              background: darkMode ? '#1a1a2e' : 'white',
               borderRadius: '16px',
-              border: '1px solid rgba(139, 92, 246, 0.08)',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+              padding: '1.5rem',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+              border: '1px solid rgba(26, 43, 60, 0.06)',
               textAlign: 'left'
             }}>
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>🤖</span>
-              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>AI Assistant</h3>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>AI Assistant</h3>
               <p style={{ fontSize: '13px', color: '#6b7280' }}>Chat below</p>
             </div>
           </div>
 
-          // ============================================================
-          // 2.6.3 CHATBOT SECTION
-          // ============================================================
+          {/* ============================================================
+              2.6.3 CHATBOT SECTION
+              ============================================================ */}
           <div style={{ marginBottom: '2rem' }}>
             <MockChatbot />
           </div>
 
-          // ============================================================
-          // 2.6.4 TRIP LIST SECTION
-          // ============================================================
+          {/* ============================================================
+              2.6.4 TRIP LIST SECTION
+              ============================================================ */}
           <h2 style={{
             fontSize: '22px',
             fontWeight: '700',
-            color: '#1a1a2e',
+            color: darkMode ? '#e4e4e7' : '#1a1a2e',
             marginBottom: '1rem',
             display: 'flex',
             alignItems: 'center',
@@ -742,7 +802,7 @@ function Dashboard() {
               fontSize: '14px',
               fontWeight: '400',
               color: '#6b7280',
-              background: '#f0f0f0',
+              background: darkMode ? '#0f0f1a' : '#f5f3ff',
               padding: '2px 10px',
               borderRadius: '12px'
             }}>
@@ -750,25 +810,24 @@ function Dashboard() {
             </span>
           </h2>
 
-          // 🔹 IF NO TRIPS: Show empty state
+          {/* ---- EMPTY STATE (No Trips) ---- */}
           {trips.length === 0 ? (
             <div style={{
-              background: 'white',
+              background: darkMode ? '#1a1a2e' : 'white',
+              borderRadius: '16px',
               padding: '3rem 2rem',
-              borderRadius: '20px',
               textAlign: 'center',
-              border: '2px dashed rgba(139, 92, 246, 0.2)',
+              border: '2px dashed rgba(26, 43, 60, 0.1)',
               position: 'relative',
               overflow: 'hidden'
             }}>
-              {/* Decorative circles */}
               <div style={{
                 position: 'absolute',
                 top: '-50px',
                 right: '-50px',
                 width: '200px',
                 height: '200px',
-                background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+                background: '#E88D5C',
                 borderRadius: '50%',
                 opacity: 0.05
               }} />
@@ -778,50 +837,38 @@ function Dashboard() {
                 left: '-80px',
                 width: '250px',
                 height: '250px',
-                background: 'linear-gradient(135deg, #EC4899, #8B5CF6)',
+                background: '#2E4A4A',
                 borderRadius: '50%',
                 opacity: 0.05
               }} />
-              
               <div style={{ position: 'relative', zIndex: 1 }}>
                 <span style={{ fontSize: '72px', display: 'block', marginBottom: '1rem' }}>🗺️</span>
-                <h3 style={{
-                  fontSize: '24px',
-                  fontWeight: '700',
-                  color: '#1a1a2e',
-                  marginBottom: '0.5rem'
-                }}>
+                <h3 style={{ fontSize: '24px', fontWeight: '700', color: darkMode ? '#e4e4e7' : '#1a1a2e', marginBottom: '0.5rem' }}>
                   Your adventure awaits!
                 </h3>
-                <p style={{
-                  color: '#6b7280',
-                  maxWidth: '400px',
-                  margin: '0 auto 1.5rem',
-                  lineHeight: '1.6'
-                }}>
+                <p style={{ color: '#6b7280', maxWidth: '400px', margin: '0 auto 1.5rem', lineHeight: '1.6' }}>
                   You haven't planned any trips yet. Let our AI create a personalized itinerary just for you!
                 </p>
                 <button
                   onClick={() => setShowTripGenerator(true)}
                   style={{
-                    padding: '0.85rem 2.5rem',
-                    background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+                    background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
                     color: 'white',
                     border: 'none',
+                    padding: '0.85rem 2.5rem',
                     borderRadius: '12px',
                     fontWeight: '700',
                     fontSize: '16px',
                     cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    boxShadow: '0 4px 16px rgba(139, 92, 246, 0.3)'
+                    transition: 'all 0.3s ease'
                   }}
                   onMouseEnter={(e) => {
                     e.target.style.transform = 'scale(1.05)'
-                    e.target.style.boxShadow = '0 8px 32px rgba(139, 92, 246, 0.4)'
+                    e.target.style.boxShadow = '0 8px 24px rgba(232, 141, 92, 0.3)'
                   }}
                   onMouseLeave={(e) => {
                     e.target.style.transform = 'scale(1)'
-                    e.target.style.boxShadow = '0 4px 16px rgba(139, 92, 246, 0.3)'
+                    e.target.style.boxShadow = 'none'
                   }}
                 >
                   ✨ Create Your First Trip
@@ -829,188 +876,254 @@ function Dashboard() {
               </div>
             </div>
           ) : (
-            // 🔹 IF TRIPS EXIST: Show trip cards
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            /* ---- TRIP CARDS (Travel Journal Style) ---- */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               {trips.map((trip, index) => (
-                // Each trip card with animation
                 <motion.div
                   key={trip.id}
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.05 }}
-                  className="trip-card"
+                  transition={{ duration: 0.4, delay: index * 0.08 }}
                   style={{
-                    background: 'white',
+                    background: darkMode ? '#1a1a2e' : 'white',
+                    borderRadius: '20px',
                     padding: '1.5rem',
-                    borderRadius: '16px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                    border: '1px solid rgba(139, 92, 246, 0.06)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    transition: 'all 0.2s ease',
-                    flexWrap: 'wrap',
-                    gap: '0.5rem'
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+                    border: '1px solid rgba(26, 43, 60, 0.06)',
+                    transition: 'all 0.3s ease',
+                    position: 'relative',
+                    overflow: 'hidden'
                   }}
                   onMouseEnter={(e) => {
-                    e.target.style.borderColor = '#8B5CF6'
-                    e.target.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.08)'
+                    e.target.style.transform = 'translateY(-4px)'
+                    e.target.style.boxShadow = '0 12px 40px rgba(0,0,0,0.08)'
                   }}
                   onMouseLeave={(e) => {
-                    e.target.style.borderColor = 'rgba(139, 92, 246, 0.06)'
-                    e.target.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'
+                    e.target.style.transform = 'translateY(0)'
+                    e.target.style.boxShadow = '0 4px 20px rgba(0,0,0,0.04)'
                   }}
                 >
-                  {/* Trip Info */}
-                  <div>
-                    <h3 style={{
-                      fontSize: '18px',
-                      fontWeight: '600',
-                      color: '#1a1a2e',
-                      marginBottom: '0.25rem'
+                  {/* Decorative corner accent */}
+                  <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    width: '80px',
+                    height: '80px',
+                    background: 'linear-gradient(135deg, transparent 50%, #F9F3E8 50%)',
+                    borderTopRightRadius: '20px',
+                    opacity: 0.5
+                  }} />
+
+                  {/* Trip Header with Destination */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: '0.75rem',
+                    flexWrap: 'wrap',
+                    gap: '0.5rem'
+                  }}>
+                    <div>
+                      <h3 style={{
+                        fontSize: '22px',
+                        fontWeight: '700',
+                        fontFamily: "'Playfair Display', serif",
+                        color: darkMode ? '#e4e4e7' : '#1a1a2e',
+                        marginBottom: '0.25rem'
+                      }}>
+                        {trip.destination}
+                      </h3>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        flexWrap: 'wrap'
+                      }}>
+                        <span style={{
+                          fontSize: '13px',
+                          color: '#6b7280',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.25rem'
+                        }}>
+                          📅 {trip.duration_days} days
+                        </span>
+                        <span style={{
+                          fontSize: '13px',
+                          color: '#6b7280',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.25rem'
+                        }}>
+                          💰 {trip.budget ? `$${trip.budget}` : 'Budget flexible'}
+                        </span>
+                        {trip.itinerary?.estimatedCost && (
+                          <span style={{
+                            fontSize: '12px',
+                            background: '#F9F3E8',
+                            padding: '0.2rem 0.75rem',
+                            borderRadius: '12px',
+                            color: '#1a1a2e'
+                          }}>
+                            {trip.itinerary.estimatedCost}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      gap: '0.25rem'
                     }}>
-                      {trip.destination}
-                    </h3>
-                    <p style={{ fontSize: '14px', color: '#6b7280' }}>
-                      📅 {trip.duration_days} days • 💰 {trip.budget ? `$${trip.budget}` : 'Budget flexible'}
-                    </p>
-                    {/* Countdown timer for this trip */}
+                      <span style={{
+                        fontSize: '12px',
+                        background: 'rgba(46, 74, 74, 0.1)',
+                        color: '#2E4A4A',
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '12px',
+                        fontWeight: '500'
+                      }}>
+                        📌 {trip.duration_days} days
+                      </span>
+                    </div>
+                  </div>
+
+               {/* Weather Widget */}
+               <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+               <WeatherWidget destination={trip.destination} />
+              </div> 
+
+                  {/* Countdown Timer */}
+                  <div style={{ marginBottom: '1rem' }}>
                     <TripCountdown trip={trip} />
                   </div>
-                  
-                  {/* Trip Actions Buttons */}
-                  <div className="trip-actions" style={{ 
-                    display: 'flex', 
-                    gap: '0.5rem', 
-                    flexWrap: 'wrap' 
+
+                  {/* Trip Actions */}
+                  <div style={{
+                    display: 'flex',
+                    gap: '0.5rem',
+                    flexWrap: 'wrap',
+                    borderTop: '1px solid rgba(26, 43, 60, 0.06)',
+                    paddingTop: '1rem',
+                    marginTop: '0.5rem'
                   }}>
-                    // 🔹 BUTTON: Share → Opens TripShare modal
                     <button
                       onClick={() => setShareTrip(trip)}
                       style={{
                         padding: '0.4rem 1rem',
-                        background: 'transparent',
-                        color: '#8B5CF6',
-                        border: '1px solid #8B5CF6',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
                         fontSize: '13px',
-                        fontWeight: '500',
+                        color: darkMode ? '#a1a1aa' : '#1a1a2e',
+                        background: 'transparent',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(26, 43, 60, 0.15)',
+                        cursor: 'pointer',
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.target.style.background = '#8B5CF6'
+                        e.target.style.background = '#1a1a2e'
                         e.target.style.color = 'white'
                       }}
                       onMouseLeave={(e) => {
                         e.target.style.background = 'transparent'
-                        e.target.style.color = '#8B5CF6'
+                        e.target.style.color = darkMode ? '#a1a1aa' : '#1a1a2e'
                       }}
                     >
                       🔗 Share
                     </button>
                     
-                    // 🔹 BUTTON: Chat → Opens GroupChat for this trip
                     <button
                       onClick={() => setSelectedTripForChat(trip)}
                       style={{
                         padding: '0.4rem 1rem',
-                        background: 'transparent',
-                        color: '#22c55e',
-                        border: '1px solid #22c55e',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
                         fontSize: '13px',
-                        fontWeight: '500',
+                        color: '#2E4A4A',
+                        background: 'transparent',
+                        borderRadius: '8px',
+                        border: '1px solid #2E4A4A',
+                        cursor: 'pointer',
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.target.style.background = '#22c55e'
+                        e.target.style.background = '#2E4A4A'
                         e.target.style.color = 'white'
                       }}
                       onMouseLeave={(e) => {
                         e.target.style.background = 'transparent'
-                        e.target.style.color = '#22c55e'
+                        e.target.style.color = '#2E4A4A'
                       }}
                     >
                       💬 Chat
                     </button>
                     
-                    // 🔹 BUTTON: Photos → Opens TripPhotos for this trip
                     <button
                       onClick={() => setSelectedTripForPhotos(trip)}
                       style={{
                         padding: '0.4rem 1rem',
-                        background: 'transparent',
-                        color: '#F59E0B',
-                        border: '1px solid #F59E0B',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
                         fontSize: '13px',
-                        fontWeight: '500',
+                        color: '#F4C542',
+                        background: 'transparent',
+                        borderRadius: '8px',
+                        border: '1px solid #F4C542',
+                        cursor: 'pointer',
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.target.style.background = '#F59E0B'
+                        e.target.style.background = '#F4C542'
                         e.target.style.color = 'white'
                       }}
                       onMouseLeave={(e) => {
                         e.target.style.background = 'transparent'
-                        e.target.style.color = '#F59E0B'
+                        e.target.style.color = '#F4C542'
                       }}
                     >
                       📸 Photos
                     </button>
                     
-                    // 🔹 BUTTON: Packing → Opens PackingList for this trip
                     <button
                       onClick={() => setSelectedTripForPacking(trip)}
                       style={{
                         padding: '0.4rem 1rem',
-                        background: 'transparent',
-                        color: '#EC4899',
-                        border: '1px solid #EC4899',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
                         fontSize: '13px',
-                        fontWeight: '500',
+                        color: '#E88D5C',
+                        background: 'transparent',
+                        borderRadius: '8px',
+                        border: '1px solid #E88D5C',
+                        cursor: 'pointer',
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.target.style.background = '#EC4899'
+                        e.target.style.background = '#E88D5C'
                         e.target.style.color = 'white'
                       }}
                       onMouseLeave={(e) => {
                         e.target.style.background = 'transparent'
-                        e.target.style.color = '#EC4899'
+                        e.target.style.color = '#E88D5C'
                       }}
                     >
                       🧳 Packing
                     </button>
                     
-                    // 🔹 BUTTON: View Itinerary → Shows trip details in an alert
                     <button
+                      onClick={() => {
+                        alert(JSON.stringify(trip.itinerary, null, 2))
+                      }}
                       style={{
                         padding: '0.4rem 1rem',
-                        background: '#f5f3ff',
-                        color: '#8B5CF6',
-                        border: '1px solid #8B5CF6',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
                         fontSize: '13px',
-                        fontWeight: '500',
+                        color: darkMode ? '#a1a1aa' : '#2C2C2C',
+                        background: 'transparent',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(26, 43, 60, 0.15)',
+                        cursor: 'pointer',
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.target.style.background = '#8B5CF6'
+                        e.target.style.background = '#2C2C2C'
                         e.target.style.color = 'white'
                       }}
                       onMouseLeave={(e) => {
-                        e.target.style.background = '#f5f3ff'
-                        e.target.style.color = '#8B5CF6'
-                      }}
-                      onClick={() => {
-                        alert(JSON.stringify(trip.itinerary, null, 2))
+                        e.target.style.background = 'transparent'
+                        e.target.style.color = darkMode ? '#a1a1aa' : '#2C2C2C'
                       }}
                     >
                       View Itinerary

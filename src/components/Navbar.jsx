@@ -48,6 +48,30 @@ function Navbar({ user, onLogout }) {
         </span>
       </div>
 
+<span
+  onClick={() => window.location.href = '/admin'}
+  style={{
+    fontSize: '12px',
+    color: darkMode ? '#6b7280' : '#9ca3af',
+    cursor: 'pointer',
+    opacity: 0.6,
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.25rem'
+  }}
+  onMouseEnter={(e) => {
+    e.target.style.opacity = '1'
+    e.target.style.color = darkMode ? '#e4e4e7' : '#1a1a2e'
+  }}
+  onMouseLeave={(e) => {
+    e.target.style.opacity = '0.6'
+    e.target.style.color = darkMode ? '#6b7280' : '#9ca3af'
+  }}
+>
+  ⚙️ Admin
+</span>
+
       {/* Right Side */}
       <div style={{ 
         display: 'flex', 

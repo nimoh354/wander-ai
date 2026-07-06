@@ -20,7 +20,6 @@ function TripGenerator({ user, onTripSaved }) {
     paymentMethod: 'card'
   })
 
-  // Generate Itinerary
   const generateItinerary = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -48,7 +47,6 @@ function TripGenerator({ user, onTripSaved }) {
     }
   }
 
-  // Save Trip
   const saveTrip = async () => {
     if (!itinerary) return
     
@@ -106,13 +104,11 @@ function TripGenerator({ user, onTripSaved }) {
     }
   }
 
-  // Book Trip
   const bookTrip = async () => {
     if (!itinerary) return
     
     setBooking(true)
     try {
-      // First, save the trip if not saved
       const profileData = {
         id: user.id,
         email: user.email,
@@ -143,7 +139,6 @@ function TripGenerator({ user, onTripSaved }) {
       
       if (tripError) throw tripError
       
-      // Create booking record
       const bookingData = {
         trip_id: tripResult[0].id,
         user_id: user.id,
@@ -163,7 +158,6 @@ function TripGenerator({ user, onTripSaved }) {
       alert('✅ Trip booked successfully! Check your bookings.')
       if (onTripSaved) onTripSaved()
       
-      // Reset everything
       setDestination('')
       setDuration(5)
       setBudget('')
@@ -189,6 +183,11 @@ function TripGenerator({ user, onTripSaved }) {
       ...prev,
       [name]: value
     }))
+  }
+
+  // ✅ Go back to dashboard
+  const goToDashboard = () => {
+    window.location.href = '/dashboard'
   }
 
   return (
@@ -220,6 +219,31 @@ function TripGenerator({ user, onTripSaved }) {
           maxWidth: '800px',
           margin: '0 auto'
         }}>
+          {/* ✅ BACK TO DASHBOARD BUTTON - ADDED HERE */}
+          <button
+            onClick={goToDashboard}
+            style={{
+              padding: '0.5rem 1.5rem',
+              background: '#6b7280',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '14px',
+              marginBottom: '1rem',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = '#4b5563'
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = '#6b7280'
+            }}
+          >
+            ← Back to Dashboard
+          </button>
+
           <h1 style={{
             fontSize: '32px',
             fontWeight: 'bold',
@@ -427,24 +451,22 @@ function TripGenerator({ user, onTripSaved }) {
                   flexWrap: 'wrap' 
                 }}>
                   <button
-                    onClick={() => window.location.href = '/'}
+                    onClick={goToDashboard}
                     style={{
                       padding: '0.5rem 1.5rem',
-                      background: 'transparent',
-                      color: '#6b7280',
-                      border: '1px solid #d1d5db',
+                      background: '#6b7280',
+                      color: 'white',
+                      border: 'none',
                       borderRadius: '8px',
                       cursor: 'pointer',
                       fontWeight: 'bold',
                       transition: 'all 0.2s ease'
                     }}
                     onMouseEnter={(e) => {
-                      e.target.style.background = '#f3f4f6'
-                      e.target.style.transform = 'scale(1.02)'
+                      e.target.style.background = '#4b5563'
                     }}
                     onMouseLeave={(e) => {
-                      e.target.style.background = 'transparent'
-                      e.target.style.transform = 'scale(1)'
+                      e.target.style.background = '#6b7280'
                     }}
                   >
                     ← Back
