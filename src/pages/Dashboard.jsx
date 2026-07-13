@@ -49,6 +49,7 @@ function Dashboard() {
   const [showBookings, setShowBookings] = useState(false)
   const [showTourPackages, setShowTourPackages] = useState(false)
   const [showStats, setShowStats] = useState(false)
+  const [selectedTripItinerary, setSelectedTripItinerary] = useState(null)
 
   // ============================================================
   // 2.2 FETCH USER DATA
@@ -459,224 +460,433 @@ function Dashboard() {
   }
 
   // ---- Page: Packing List ----
-if (selectedTripForPacking) {
-  return (
-    <div>
-      <Navbar user={user} onLogout={handleLogout} />
-      <div style={{
-        minHeight: '100vh',
-        background: darkMode ? '#0f0f1a' : '#f5f3ff',
-        padding: '2rem'
-      }}>
-        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-          <PackingList 
-            trip={selectedTripForPacking} 
-            onBack={() => setSelectedTripForPacking(null)} 
-          />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ---- Page: Admin Dashboard (PROTECTED) ----
-if (showAdmin) {
-  // Only admins can access
-  if (userType === 'admin') {
-    return <AdminDashboard user={user} onLogout={handleLogout} />
-  } else {
-    // Non-admin trying to access - show access denied
+  if (selectedTripForPacking) {
     return (
       <div>
         <Navbar user={user} onLogout={handleLogout} />
         <div style={{
           minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
           background: darkMode ? '#0f0f1a' : '#f5f3ff',
           padding: '2rem'
         }}>
-          <div style={{
-            background: darkMode ? '#1a1a2e' : 'white',
-            padding: '2rem',
-            borderRadius: '16px',
-            textAlign: 'center',
-            maxWidth: '400px',
-            width: '100%'
-          }}>
-            <span style={{ fontSize: '48px' }}>⛔</span>
-            <h2 style={{ marginTop: '1rem', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
-              Access Denied
-            </h2>
-            <p style={{ color: darkMode ? '#a1a1aa' : '#6b7280', margin: '0.5rem 0 1.5rem' }}>
-              You don't have admin privileges. Please contact the system administrator.
-            </p>
-            <button
-              onClick={() => setShowAdmin(false)}
-              style={{
-                padding: '0.5rem 1.5rem',
-                background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer'
-              }}
-            >
-              ← Back to Dashboard
-            </button>
+          <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+            <PackingList 
+              trip={selectedTripForPacking} 
+              onBack={() => setSelectedTripForPacking(null)} 
+            />
           </div>
         </div>
       </div>
     )
   }
-}
 
-// ---- Page: ShowBookings ----
-if (showBookings) {
-  return (
-    <div>
-      <Navbar user={user} onLogout={handleLogout} />
-      <div style={{
-        minHeight: '100vh',
-        background: darkMode ? '#0f0f1a' : '#f5f3ff',
-        padding: '2rem'
-      }}>
-        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-          <button
-            onClick={() => setShowBookings(false)}
-            style={{
-              background: 'transparent',
-              color: darkMode ? '#a1a1aa' : '#1a1a2e',
-              border: '2px solid #1a1a2e',
-              padding: '0.5rem 1.5rem',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              marginBottom: '1rem',
-              fontWeight: '600'
-            }}
-          >
-            ← Back to Dashboard
-          </button>
-          <UserBookings user={user} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-
-// ---- Page: ShowTourPackages ----
-if (showTourPackages) {
-  return (
-    <div>
-      <Navbar user={user} onLogout={handleLogout} />
-      <div style={{
-        minHeight: '100vh',
-        background: darkMode ? '#0f0f1a' : '#f5f3ff',
-        padding: '2rem'
-      }}>
-        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-          <button
-            onClick={() => setShowTourPackages(false)}
-            style={{
-              background: 'transparent',
-              color: darkMode ? '#a1a1aa' : '#1a1a2e',
-              border: '2px solid #1a1a2e',
-              padding: '0.5rem 1.5rem',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              marginBottom: '1rem',
-              fontWeight: '600'
-            }}
-          >
-            ← Back to Dashboard
-          </button>
-          <UserTourPackages user={user} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ---- Page: ShowStats ----
-if (showStats) {
-  const totalTrips = trips.length
-  const uniqueDestinations = new Set(
-    trips
-      .map((trip) => trip.destination && trip.destination.toString().trim().toLowerCase())
-      .filter(Boolean)
-  ).size
-  const totalBudget = trips.reduce((sum, trip) => sum + (Number(trip.budget) || 0), 0)
-  const averageDuration = trips.length > 0
-    ? Math.round(trips.reduce((sum, trip) => sum + (Number(trip.duration_days) || 0), 0) / trips.length)
-    : 0
-  const upcomingTrips = trips.filter((trip) => {
-    if (!trip.departure_date) return false
-    return new Date(trip.departure_date) > new Date()
-  }).length
-
-  return (
-    <div>
-      <Navbar user={user} onLogout={handleLogout} />
-      <div style={{
-        minHeight: '100vh',
-        background: darkMode ? '#0f0f1a' : '#f5f3ff',
-        padding: '2rem'
-      }}>
-        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-          <button
-            onClick={() => setShowStats(false)}
-            style={{
-              background: 'transparent',
-              color: darkMode ? '#a1a1aa' : '#1a1a2e',
-              border: '2px solid #1a1a2e',
-              padding: '0.5rem 1.5rem',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              marginBottom: '1rem',
-              fontWeight: '600'
-            }}
-          >
-            ← Back to Dashboard
-          </button>
+  // ---- Page: Admin Dashboard (PROTECTED) ----
+  if (showAdmin) {
+    // Only admins can access
+    if (userType === 'admin') {
+      return <AdminDashboard user={user} onLogout={handleLogout} />
+    } else {
+      // Non-admin trying to access - show access denied
+      return (
+        <div>
+          <Navbar user={user} onLogout={handleLogout} />
           <div style={{
-            background: darkMode ? '#1a1a2e' : 'white',
-            borderRadius: '16px',
-            padding: '2rem',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
-            border: '1px solid rgba(26, 43, 60, 0.06)'
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: darkMode ? '#0f0f1a' : '#f5f3ff',
+            padding: '2rem'
           }}>
-            <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '1rem', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
-              📊 Your Stats
-            </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-              <div style={{ background: darkMode ? '#111827' : '#f9fafb', borderRadius: '16px', padding: '1.5rem' }}>
-                <p style={{ marginBottom: '0.5rem', color: '#6b7280' }}>Total Trips</p>
-                <p style={{ fontSize: '32px', fontWeight: '700', color: '#8B5CF6' }}>{totalTrips}</p>
-              </div>
-              <div style={{ background: darkMode ? '#111827' : '#f9fafb', borderRadius: '16px', padding: '1.5rem' }}>
-                <p style={{ marginBottom: '0.5rem', color: '#6b7280' }}>Unique Destinations</p>
-                <p style={{ fontSize: '32px', fontWeight: '700', color: '#F59E0B' }}>{uniqueDestinations}</p>
-              </div>
-              <div style={{ background: darkMode ? '#111827' : '#f9fafb', borderRadius: '16px', padding: '1.5rem' }}>
-                <p style={{ marginBottom: '0.5rem', color: '#6b7280' }}>Average Duration</p>
-                <p style={{ fontSize: '32px', fontWeight: '700', color: '#22C55E' }}>{averageDuration} days</p>
-              </div>
-              <div style={{ background: darkMode ? '#111827' : '#f9fafb', borderRadius: '16px', padding: '1.5rem' }}>
-                <p style={{ marginBottom: '0.5rem', color: '#6b7280' }}>Upcoming Trips</p>
-                <p style={{ fontSize: '32px', fontWeight: '700', color: '#EF4444' }}>{upcomingTrips}</p>
-              </div>
+            <div style={{
+              background: darkMode ? '#1a1a2e' : 'white',
+              padding: '2rem',
+              borderRadius: '16px',
+              textAlign: 'center',
+              maxWidth: '400px',
+              width: '100%'
+            }}>
+              <span style={{ fontSize: '48px' }}>⛔</span>
+              <h2 style={{ marginTop: '1rem', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
+                Access Denied
+              </h2>
+              <p style={{ color: darkMode ? '#a1a1aa' : '#6b7280', margin: '0.5rem 0 1.5rem' }}>
+                You don't have admin privileges. Please contact the system administrator.
+              </p>
+              <button
+                onClick={() => setShowAdmin(false)}
+                style={{
+                  padding: '0.5rem 1.5rem',
+                  background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                ← Back to Dashboard
+              </button>
             </div>
-            <div style={{ marginTop: '2rem', color: '#6b7280' }}>
-              <p>{totalBudget > 0 ? `Total planned budget across trips: $${totalBudget.toLocaleString()}` : 'No trip budget data available yet.'}</p>
+          </div>
+        </div>
+      )
+    }
+  }
+
+  // ---- Page: ShowBookings ----
+  if (showBookings) {
+    return (
+      <div>
+        <Navbar user={user} onLogout={handleLogout} />
+        <div style={{
+          minHeight: '100vh',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
+          padding: '2rem'
+        }}>
+          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+            <button
+              onClick={() => setShowBookings(false)}
+              style={{
+                background: 'transparent',
+                color: darkMode ? '#a1a1aa' : '#1a1a2e',
+                border: '2px solid #1a1a2e',
+                padding: '0.5rem 1.5rem',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                marginBottom: '1rem',
+                fontWeight: '600'
+              }}
+            >
+              ← Back to Dashboard
+            </button>
+            <UserBookings user={user} />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ---- Page: ShowTourPackages ----
+  if (showTourPackages) {
+    return (
+      <div>
+        <Navbar user={user} onLogout={handleLogout} />
+        <div style={{
+          minHeight: '100vh',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
+          padding: '2rem'
+        }}>
+          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+            <button
+              onClick={() => setShowTourPackages(false)}
+              style={{
+                background: 'transparent',
+                color: darkMode ? '#a1a1aa' : '#1a1a2e',
+                border: '2px solid #1a1a2e',
+                padding: '0.5rem 1.5rem',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                marginBottom: '1rem',
+                fontWeight: '600'
+              }}
+            >
+              ← Back to Dashboard
+            </button>
+            <UserTourPackages user={user} />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ---- Page: ShowStats ----
+  if (showStats) {
+    const totalTrips = trips.length
+    const uniqueDestinations = new Set(
+      trips
+        .map((trip) => trip.destination && trip.destination.toString().trim().toLowerCase())
+        .filter(Boolean)
+    ).size
+    const totalBudget = trips.reduce((sum, trip) => sum + (Number(trip.budget) || 0), 0)
+    const averageDuration = trips.length > 0
+      ? Math.round(trips.reduce((sum, trip) => sum + (Number(trip.duration_days) || 0), 0) / trips.length)
+      : 0
+    const upcomingTrips = trips.filter((trip) => {
+      if (!trip.departure_date) return false
+      return new Date(trip.departure_date) > new Date()
+    }).length
+
+    return (
+      <div>
+        <Navbar user={user} onLogout={handleLogout} />
+        <div style={{
+          minHeight: '100vh',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
+          padding: '2rem'
+        }}>
+          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+            <button
+              onClick={() => setShowStats(false)}
+              style={{
+                background: 'transparent',
+                color: darkMode ? '#a1a1aa' : '#1a1a2e',
+                border: '2px solid #1a1a2e',
+                padding: '0.5rem 1.5rem',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                marginBottom: '1rem',
+                fontWeight: '600'
+              }}
+            >
+              ← Back to Dashboard
+            </button>
+            <div style={{
+              background: darkMode ? '#1a1a2e' : 'white',
+              borderRadius: '16px',
+              padding: '2rem',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+              border: '1px solid rgba(26, 43, 60, 0.06)'
+            }}>
+              <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '1rem', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
+                📊 Your Stats
+              </h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                <div style={{ background: darkMode ? '#111827' : '#f9fafb', borderRadius: '16px', padding: '1.5rem' }}>
+                  <p style={{ marginBottom: '0.5rem', color: '#6b7280' }}>Total Trips</p>
+                  <p style={{ fontSize: '32px', fontWeight: '700', color: '#8B5CF6' }}>{totalTrips}</p>
+                </div>
+                <div style={{ background: darkMode ? '#111827' : '#f9fafb', borderRadius: '16px', padding: '1.5rem' }}>
+                  <p style={{ marginBottom: '0.5rem', color: '#6b7280' }}>Unique Destinations</p>
+                  <p style={{ fontSize: '32px', fontWeight: '700', color: '#F59E0B' }}>{uniqueDestinations}</p>
+                </div>
+                <div style={{ background: darkMode ? '#111827' : '#f9fafb', borderRadius: '16px', padding: '1.5rem' }}>
+                  <p style={{ marginBottom: '0.5rem', color: '#6b7280' }}>Average Duration</p>
+                  <p style={{ fontSize: '32px', fontWeight: '700', color: '#22C55E' }}>{averageDuration} days</p>
+                </div>
+                <div style={{ background: darkMode ? '#111827' : '#f9fafb', borderRadius: '16px', padding: '1.5rem' }}>
+                  <p style={{ marginBottom: '0.5rem', color: '#6b7280' }}>Upcoming Trips</p>
+                  <p style={{ fontSize: '32px', fontWeight: '700', color: '#EF4444' }}>{upcomingTrips}</p>
+                </div>
+              </div>
+              <div style={{ marginTop: '2rem', color: '#6b7280' }}>
+                <p>{totalBudget > 0 ? `Total planned budget across trips: $${totalBudget.toLocaleString()}` : 'No trip budget data available yet.'}</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  )
-}
+    )
+  }
+
+  // ============================================================
+  // ITINERARY MODAL
+  // ============================================================
+  if (selectedTripItinerary) {
+    const trip = selectedTripItinerary
+    const itinerary = trip.itinerary
+    
+    return (
+      <div>
+        <Navbar user={user} onLogout={handleLogout} />
+        <div style={{
+          minHeight: '100vh',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
+          padding: '2rem'
+        }}>
+          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+            <button
+              onClick={() => setSelectedTripItinerary(null)}
+              style={{
+                background: 'transparent',
+                color: darkMode ? '#a1a1aa' : '#1a1a2e',
+                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                padding: '0.5rem 1.5rem',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                marginBottom: '1rem',
+                fontWeight: '600'
+              }}
+            >
+              ← Back to Dashboard
+            </button>
+
+            <div style={{
+              background: darkMode ? '#1a1a2e' : 'white',
+              borderRadius: '16px',
+              padding: '2.5rem',
+              border: `2px solid ${darkMode ? 'rgba(255,255,255,0.05)' : '#e5e7eb'}`,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.04)'
+            }}>
+              {/* Lock Icon Header */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                marginBottom: '1.5rem'
+              }}>
+                <div style={{
+                  background: darkMode ? '#2d2d44' : '#f3f4f6',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  <span>🔒</span>
+                  <span style={{ fontSize: '14px', color: darkMode ? '#a1a1aa' : '#6b7280' }}>
+                    TRAVEL ITINERARY
+                  </span>
+                </div>
+              </div>
+
+              {/* Destination Header */}
+              <h2 style={{
+                fontSize: '28px',
+                fontWeight: '700',
+                fontFamily: "'Playfair Display', serif",
+                color: darkMode ? '#e4e4e7' : '#1a1a2e',
+                textAlign: 'center',
+                marginBottom: '1.5rem'
+              }}>
+                {trip.destination}
+              </h2>
+
+              {/* Flight & Hotel Details */}
+              {itinerary && (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '0.75rem',
+                  marginBottom: '1.5rem',
+                  padding: '1rem',
+                  background: darkMode ? '#0f0f1a' : '#f9fafb',
+                  borderRadius: '12px'
+                }}>
+                  <div>
+                    <span style={{ fontSize: '12px', color: '#6b7280' }}>FLIGHT #</span>
+                    <p style={{ fontWeight: '600', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
+                      {itinerary.flight_airline || 'N/A'} {itinerary.flight_number || ''}
+                    </p>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '12px', color: '#6b7280' }}>HOTEL</span>
+                    <p style={{ fontWeight: '600', color: darkMode ? '#e4e4e7' : '#1a1a2e', fontSize: '14px' }}>
+                      {itinerary.hotel || 'Not specified'}
+                    </p>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={{ fontSize: '12px', color: '#6b7280' }}>HOTEL ADDRESS</span>
+                    <p style={{ fontWeight: '400', color: darkMode ? '#d1d5db' : '#4b5563', fontSize: '14px' }}>
+                      {itinerary.hotel_address || 'Address not available'}
+                    </p>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '12px', color: '#6b7280' }}>ARRIVAL</span>
+                    <p style={{ fontWeight: '600', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
+                      {itinerary.arrival_date || 'TBD'}
+                    </p>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: '12px', color: '#6b7280' }}>DEPARTURE</span>
+                    <p style={{ fontWeight: '600', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
+                      {itinerary.departure_date || 'TBD'}
+                    </p>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={{ fontSize: '12px', color: '#6b7280' }}>BUDGET</span>
+                    <p style={{ fontWeight: '600', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
+                      {itinerary.estimatedCost || trip.budget || 'Flexible'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Itinerary Days */}
+              <div style={{ marginBottom: '1.5rem' }}>
+                {itinerary?.days && itinerary.days.map((day, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      marginBottom: index < itinerary.days.length - 1 ? '1.5rem' : '0',
+                      borderBottom: index < itinerary.days.length - 1 ? `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : '#e5e7eb'}` : 'none',
+                      paddingBottom: index < itinerary.days.length - 1 ? '1.5rem' : '0'
+                    }}
+                  >
+                    <h3 style={{
+                      fontSize: '18px',
+                      fontWeight: '700',
+                      fontFamily: "'Playfair Display', serif",
+                      color: darkMode ? '#e4e4e7' : '#1a1a2e',
+                      marginBottom: '0.75rem'
+                    }}>
+                      {day.title || `Day ${index + 1}`}
+                    </h3>
+                    <div style={{ display: 'grid', gap: '0.5rem', paddingLeft: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                        <span style={{ color: '#E88D5C', fontWeight: '600', minWidth: '70px' }}>Morning:</span>
+                        <span style={{ color: darkMode ? '#d1d5db' : '#4b5563' }}>
+                          {day.morning || day.activities?.[0] || 'Free time'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                        <span style={{ color: '#8B5CF6', fontWeight: '600', minWidth: '70px' }}>Afternoon:</span>
+                        <span style={{ color: darkMode ? '#d1d5db' : '#4b5563' }}>
+                          {day.afternoon || day.activities?.[1] || 'Free time'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                        <span style={{ color: '#EC4899', fontWeight: '600', minWidth: '70px' }}>Evening:</span>
+                        <span style={{ color: darkMode ? '#d1d5db' : '#4b5563' }}>
+                          {day.evening || day.activities?.[2] || 'Free time'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Travel Tips */}
+              {itinerary?.tips && itinerary.tips.length > 0 && (
+                <div style={{
+                  marginTop: '1rem',
+                  padding: '1rem',
+                  background: darkMode ? '#0f0f1a' : '#f9fafb',
+                  borderRadius: '12px'
+                }}>
+                  <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '0.5rem', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
+                    💡 Travel Tips
+                  </h4>
+                  {itinerary.tips.slice(0, 4).map((tip, i) => (
+                    <p key={i} style={{ color: darkMode ? '#d1d5db' : '#4b5563', fontSize: '13px', marginBottom: '0.25rem' }}>
+                      {tip}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {/* Back Button */}
+              <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center' }}>
+                <button
+                  onClick={() => setSelectedTripItinerary(null)}
+                  style={{
+                    padding: '0.75rem 2rem',
+                    background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '16px'
+                  }}
+                >
+                  ← Back to Dashboard
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // ============================================================
   // 2.6 MAIN DASHBOARD (Default View)
@@ -1356,28 +1566,32 @@ if (showStats) {
                     
                     <button
                       onClick={() => {
-                        alert(JSON.stringify(trip.itinerary, null, 2))
+                        if (trip.itinerary) {
+                          setSelectedTripItinerary(trip)
+                        } else {
+                          alert('No itinerary available for this trip.')
+                        }
                       }}
                       style={{
                         padding: '0.4rem 1rem',
                         fontSize: '13px',
-                        color: darkMode ? '#a1a1aa' : '#2C2C2C',
+                        color: '#E88D5C',
                         background: 'transparent',
                         borderRadius: '8px',
-                        border: '1px solid rgba(26, 43, 60, 0.15)',
+                        border: '1px solid #E88D5C',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.target.style.background = '#2C2C2C'
+                        e.target.style.background = '#E88D5C'
                         e.target.style.color = 'white'
                       }}
                       onMouseLeave={(e) => {
                         e.target.style.background = 'transparent'
-                        e.target.style.color = darkMode ? '#a1a1aa' : '#2C2C2C'
+                        e.target.style.color = '#E88D5C'
                       }}
                     >
-                      View Itinerary
+                      📋 View Itinerary
                     </button>
                   </div>
                 </motion.div>
