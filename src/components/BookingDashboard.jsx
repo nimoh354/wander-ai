@@ -19,38 +19,74 @@ function BookingDashboard({ user }) {
   const fetchBookings = async () => {
     setLoading(true)
     
-    // Fetch all bookings with package details
-    const { data, error } = await supabase
-      .from('tour_bookings')
-      .select(`
-        *,
-        tour_packages (
+    try {
+      // Fetch all bookings with package details
+      const { data, error } = await supabase
+        .from('tour_bookings')
+        .select(`
           id,
-          name,
-          price,
-          user_id
-        ),
-        profiles!tour_bookings_user_id_fkey (
-          email,
-          full_name
-        )
-      `)
-      .order('created_at', { ascending: false })
+          user_id,
+          package_id,
+          booking_date,
+          status,
+          created_at,
+          tour_packages (
+            id,
+            name,
+            price,
+            user_id
+          )
+        `)
+        .order('created_at', { ascending: false })
 
-    if (!error) {
-      setBookings(data || [])
+      if (error) {
+        console.error('❌ Fetch error:', error)
+        setLoading(false)
+        return
+      }
+
+      // Enrich with user profile info
+      let enrichedData = data || []
+      
+      if (enrichedData.length > 0) {
+        // Get unique user IDs
+        const userIds = [...new Set(enrichedData.map(b => b.user_id))]
+        
+        if (userIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, email, full_name')
+            .in('id', userIds)
+          
+          // Map profiles to bookings
+          const profileMap = {}
+          profiles?.forEach(p => {
+            profileMap[p.id] = p
+          })
+          
+          enrichedData = enrichedData.map(booking => ({
+            ...booking,
+            profiles: profileMap[booking.user_id] || { email: 'Unknown', full_name: 'Unknown User' }
+          }))
+        }
+      }
+      
+      setBookings(enrichedData)
       
       // Calculate stats
       const stats = {
-        total: data?.length || 0,
-        pending: data?.filter(b => b.status === 'pending').length || 0,
-        confirmed: data?.filter(b => b.status === 'confirmed').length || 0,
-        completed: data?.filter(b => b.status === 'completed').length || 0,
-        cancelled: data?.filter(b => b.status === 'cancelled').length || 0
+        total: enrichedData?.length || 0,
+        pending: enrichedData?.filter(b => b.status === 'pending').length || 0,
+        confirmed: enrichedData?.filter(b => b.status === 'confirmed').length || 0,
+        completed: enrichedData?.filter(b => b.status === 'completed').length || 0,
+        cancelled: enrichedData?.filter(b => b.status === 'cancelled').length || 0
       }
       setStats(stats)
+    } catch (err) {
+      console.error('❌ Error fetching bookings:', err)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const updateBookingStatus = async (bookingId, status) => {

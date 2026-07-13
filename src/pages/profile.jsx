@@ -60,6 +60,17 @@ function Profile({ user, onLogout }) {
     setMessage('')
     
     try {
+      console.log('Supabase URL:', import.meta.env.VITE_SUPABASE_URL)
+      // Debug: list buckets visible to this client
+      try {
+        const { data: buckets, error: listErr } = await supabase.storage.listBuckets()
+        console.log('Supabase buckets visible to client:', buckets, listErr)
+        if (listErr) {
+          console.warn('Supabase listBuckets error:', listErr)
+        }
+      } catch (be) {
+        console.warn('Error listing buckets:', be)
+      }
       const fileExt = file.name.split('.').pop()
       const fileName = `${user.id}-${Date.now()}.${fileExt}`
       
@@ -67,7 +78,15 @@ function Profile({ user, onLogout }) {
         .from('avatars')
         .upload(fileName, file)
       
-      if (uploadError) throw uploadError
+      if (uploadError) {
+        // Friendly guidance for common bucket-missing errors
+        const msg = uploadError.message || String(uploadError)
+        console.error('Supabase upload error:', uploadError)
+        if (/bucket/i.test(msg) || /not found/i.test(msg)) {
+          throw new Error(`Storage bucket "avatars" not found. Confirm the bucket exists in the current Supabase project and that your environment variables point to that project. If the bucket is present, check that the anon key has storage access to it.`)
+        }
+        throw uploadError
+      }
       
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
@@ -76,7 +95,9 @@ function Profile({ user, onLogout }) {
       setAvatarUrl(publicUrl)
       setMessage('✅ Avatar uploaded successfully!')
     } catch (error) {
-      setMessage(`❌ ${error.message}`)
+      // surface clearer instruction for missing buckets
+      const em = error?.message || String(error)
+      setMessage(`❌ ${em}`)
     } finally {
       setUploading(false)
     }

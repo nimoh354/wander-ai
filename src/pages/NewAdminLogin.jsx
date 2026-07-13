@@ -25,11 +25,17 @@ function NewAdminLogin({ onLogin }) {
         })
 
         if (!error && data?.user) {
-          const { data: profile } = await supabase
+          const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('user_type')
             .eq('id', data.user.id)
             .single()
+
+          if (profileError) {
+            setError('❌ Unable to verify admin profile')
+            setLoading(false)
+            return
+          }
 
           if (profile?.user_type === 'admin') {
             localStorage.setItem('adminUser', JSON.stringify(data.user))
@@ -37,18 +43,14 @@ function NewAdminLogin({ onLogin }) {
             setLoading(false)
             return
           }
+
+          await supabase.auth.signOut()
+          setError('❌ Admin access required')
+          setLoading(false)
+          return
         }
 
-      // In NewAdminLogin.jsx, replace the fakeUser creation with this:
-const realUser = {
-  id: 'YO5c647934-7bfa-4be9-aedb-971be5f8ba6f', // Paste your real Supabase user ID here
-  email: ADMIN_EMAIL,
-  user_metadata: { full_name: 'Admin' }
-}
-
-localStorage.setItem('adminUser', JSON.stringify(realUser))
-alert('✅ Admin login successful!')
-onLogin(realUser)
+        setError('❌ Invalid admin credentials')
         setLoading(false)
         return
       }

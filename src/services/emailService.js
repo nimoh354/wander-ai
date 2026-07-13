@@ -1,11 +1,15 @@
 // src/services/emailService.js
-import emailjs from '@emailjs/browser'
+// import { init, send } from '@emailjs/browser/es/index.js'
+import { init, send } from '@emailjs/browser'
 
 // 🔑 YOUR ACTUAL VALUES
 const SERVICE_ID = 'service_4vy482i'
 const TEMPLATE_ID = 'template_qg263kl'
 const PUBLIC_KEY = 'YcQ-o8R1wq2_7nNEXD'
 const TEMPLATE_NEWSLETTER = 'template_ktnpj7y'
+
+// Initialize EmailJS with the public key
+init(PUBLIC_KEY)
 
 // ✅ Welcome Email (Sign Up)
 export const sendWelcomeEmail = async (userEmail, userName) => {
@@ -15,7 +19,7 @@ export const sendWelcomeEmail = async (userEmail, userName) => {
       name: userName || 'Traveler',
     }
 
-    const response = await emailjs.send(
+    const response = await send(
       SERVICE_ID,
       TEMPLATE_ID,
       templateParams,
@@ -40,7 +44,7 @@ export const sendBookingConfirmation = async (userEmail, destination, travelers)
       name: 'Traveler',
     }
 
-    const response = await emailjs.send(
+    const response = await send(
       SERVICE_ID,
       'template_booking_confirmation',
       templateParams,
@@ -64,7 +68,7 @@ export const sendTripReminder = async (userEmail, destination) => {
       name: 'Traveler',
     }
 
-    const response = await emailjs.send(
+    const response = await send(
       SERVICE_ID,
       'template_trip_reminder',
       templateParams,
@@ -89,7 +93,7 @@ export const sendBulkEmail = async (userEmail, subject, message, userName) => {
       message: message || 'Check out the latest updates!',
     }
 
-    const response = await emailjs.send(
+    const response = await send(
       SERVICE_ID,
       TEMPLATE_NEWSLETTER,
       templateParams,

@@ -13,6 +13,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [isSharedTrip, setIsSharedTrip] = useState(false)
   const [isAdminRoute, setIsAdminRoute] = useState(false)
+  const [adminPath, setAdminPath] = useState('')
 
   useEffect(() => {
     const pathname = window.location.pathname
@@ -27,6 +28,7 @@ function App() {
     // Check for admin routes
     if (pathname === '/admin' || pathname.startsWith('/admin/')) {
       setIsAdminRoute(true)
+      setAdminPath(pathname)
       setLoading(false)
       return
     }
@@ -87,24 +89,37 @@ function App() {
     )
   }
 
-  // Admin route - FORCE RENDER for testing
   if (isAdminRoute) {
-    console.log('🔐 Admin route detected!')
-    
-    // For testing: create a dummy admin user if no session exists
-    const dummyUser = {
-      id: 'dummy-admin-id',
-      email: 'wanderaiadmin@gmail.com',
-      user_metadata: { full_name: 'Admin' }
+    const adminUser = typeof window !== 'undefined'
+      ? JSON.parse(localStorage.getItem('adminUser') || 'null')
+      : null
+
+    if (adminPath === '/admin') {
+      return (
+        <ThemeProvider>
+          <NewAdminLogin onLogin={handleAdminLogin} />
+        </ThemeProvider>
+      )
     }
-    
-    // Use session user if exists, otherwise use dummy
-    const currentUser = session?.user || dummyUser
-    console.log('👤 Current user for admin:', currentUser)
-    
+
+    if (adminPath.startsWith('/admin/dashboard')) {
+      const currentUser = adminUser || session?.user
+
+      if (!currentUser) {
+        window.location.href = '/admin'
+        return null
+      }
+
+      return (
+        <ThemeProvider>
+          <AdminDashboard user={currentUser} onLogout={handleLogout} />
+        </ThemeProvider>
+      )
+    }
+
     return (
       <ThemeProvider>
-        <AdminDashboard user={currentUser} onLogout={handleLogout} />
+        <NewAdminLogin onLogin={handleAdminLogin} />
       </ThemeProvider>
     )
   }

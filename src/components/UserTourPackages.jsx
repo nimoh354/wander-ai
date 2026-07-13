@@ -1,3 +1,4 @@
+// src/components/UserTourPackages.jsx
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import Booking from './Booking'
@@ -5,6 +6,7 @@ import Booking from './Booking'
 function UserTourPackages({ user }) {
   const [packages, setPackages] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     fetchPackages()
@@ -12,23 +14,72 @@ function UserTourPackages({ user }) {
 
   const fetchPackages = async () => {
     setLoading(true)
+    setError('')
     
-    const { data, error } = await supabase
-      .from('tour_packages')
-      .select('*')
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('tour_packages')
+        .select('*')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
 
-    if (!error) {
-      setPackages(data || [])
-    } else {
-      console.error('❌ Error fetching packages:', error)
+      if (fetchError) {
+        setError('Failed to load packages')
+        setPackages([])
+        return
+      }
+
+      if (!data || data.length === 0) {
+        setPackages([])
+        setLoading(false)
+        return
+      }
+
+      setPackages(data)
+
+    } catch (err) {
+      setError('Failed to load packages')
+      setPackages([])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   if (loading) {
-    return <p style={{ color: '#6b7280' }}>Loading packages...</p>
+    return (
+      <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+        <span>⏳ Loading packages...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{
+        padding: '1rem',
+        background: '#fef2f2',
+        border: '1px solid #fca5a5',
+        borderRadius: '8px',
+        color: '#991b1b',
+        textAlign: 'center'
+      }}>
+        ❌ {error}
+        <button
+          onClick={fetchPackages}
+          style={{
+            marginLeft: '0.5rem',
+            padding: '0.25rem 0.75rem',
+            background: '#991b1b',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -40,7 +91,7 @@ function UserTourPackages({ user }) {
         color: '#1a1a2e',
         marginBottom: '1.5rem'
       }}>
-        🏝️ Tour Packages
+        🏝️ Tour Packages ({packages.length})
       </h2>
 
       {packages.length === 0 ? (
@@ -82,9 +133,20 @@ function UserTourPackages({ user }) {
               e.target.style.transform = 'translateY(0)'
             }}>
               <div>
-                <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '0.25rem' }}>
-                  {pkg.name}
-                </h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                  <h4 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '0.25rem' }}>
+                    {pkg.name}
+                  </h4>
+                  <span style={{
+                    fontSize: '10px',
+                    padding: '0.15rem 0.5rem',
+                    borderRadius: '12px',
+                    background: '#e5e7eb',
+                    color: '#6b7280'
+                  }}>
+                    #{packages.indexOf(pkg) + 1}
+                  </span>
+                </div>
                 <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '0.5rem' }}>
                   {pkg.description || 'No description'}
                 </p>
@@ -100,14 +162,25 @@ function UserTourPackages({ user }) {
                   <span>📅 {pkg.duration_days} days</span>
                   <span>👥 {pkg.max_guests} guests</span>
                 </div>
+                {pkg.season && (
+                  <span style={{
+                    fontSize: '12px',
+                    padding: '0.15rem 0.5rem',
+                    borderRadius: '12px',
+                    background: '#fef3c7',
+                    color: '#d97706'
+                  }}>
+                    🌤️ {pkg.season}
+                  </span>
+                )}
                 {pkg.includes && pkg.includes.length > 0 && (
-                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '0.25rem' }}>
                     ✅ Includes: {pkg.includes.join(', ')}
                   </div>
                 )}
               </div>
               
-              {/* ✅ Booking Form */}
+              {/* Booking Form */}
               <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid rgba(26, 43, 60, 0.06)' }}>
                 <Booking user={user} packageId={pkg.id} />
               </div>

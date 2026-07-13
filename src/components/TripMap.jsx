@@ -1,168 +1,149 @@
-import React, { useEffect } from 'react'
+// src/components/TripMap.jsx
+import React, { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-// Fix for default marker icons in React-Leaflet
+// Fix for default markers - MUST be outside component
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
 
-// City coordinates database
-const cityCoordinates = {
-  'paris': [48.8566, 2.3522],
-  'london': [51.5074, -0.1278],
-  'tokyo': [35.6762, 139.6503],
-  'new york': [40.7128, -74.0060],
-  'bali': [-8.3405, 115.0920],
-  'rome': [41.9028, 12.4964],
-  'dubai': [25.2048, 55.2708],
-  'cape town': [-33.9249, 18.4241],
-  'sydney': [-33.8688, 151.2093],
-  'bangkok': [13.7563, 100.5018],
-  'singapore': [1.3521, 103.8198],
-  'barcelona': [41.3851, 2.1734],
-  'amsterdam': [52.3676, 4.9041],
-  'berlin': [52.5200, 13.4050],
-  'venice': [45.4408, 12.3155],
-  'florence': [43.7696, 11.2558],
-  'istanbul': [41.0082, 28.9784],
-  'marrakech': [31.6295, -7.9811],
-  'rio': [-22.9068, -43.1729],
-  'mexico city': [19.4326, -99.1332],
-  'milan': [45.4642, 9.1900],
-  'vienna': [48.2082, 16.3738],
-  'prague': [50.0755, 14.4378],
-  'budapest': [47.4979, 19.0402],
-  'athens': [37.9838, 23.7275],
-  'lisbon': [38.7223, -9.1393],
-  'dublin': [53.3498, -6.2603],
-  'edinburgh': [55.9533, -3.1883],
-  'stockholm': [59.3293, 18.0686],
-  'oslo': [59.9139, 10.7522],
-  'helsinki': [60.1699, 24.9384],
-  'moscow': [55.7558, 37.6173],
-  'beijing': [39.9042, 116.4074],
-  'shanghai': [31.2304, 121.4737],
-  'hong kong': [22.3193, 114.1694],
-  'seoul': [37.5665, 126.9780],
-  'mumbai': [19.0760, 72.8777],
-  'delhi': [28.6139, 77.2090],
-  'cairo': [30.0444, 31.2357],
-  'nairobi': [-1.2921, 36.8219],
-  'lagos': [6.5244, 3.3792],
-  'sao paulo': [-23.5505, -46.6333],
-  'buenos aires': [-34.6037, -58.3816],
-  'toronto': [43.6532, -79.3832],
-  'vancouver': [49.2827, -123.1207],
-  'san francisco': [37.7749, -122.4194],
-  'los angeles': [34.0522, -118.2437],
-  'chicago': [41.8781, -87.6298],
-  'miami': [25.7617, -80.1918],
-  'orlando': [28.5383, -81.3792],
-  'las vegas': [36.1699, -115.1398],
-  'denver': [39.7392, -104.9903],
-  'seattle': [47.6062, -122.3321],
-  'portland': [45.5152, -122.6784],
-  'austin': [30.2672, -97.7431],
-  'nashville': [36.1627, -86.7816],
-  'new orleans': [29.9511, -90.0715],
-  'honolulu': [21.3156, -157.8589],
-  'anchorage': [61.2181, -149.9003]
+// Custom marker icon
+const createCustomIcon = (color = '#E88D5C') => {
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="
+      background: ${color};
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 16px;
+      border: 3px solid white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    ">📍</div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16]
+  })
 }
 
-const getCoordinates = (destination) => {
-  const lower = destination.toLowerCase()
-  for (const [key, coords] of Object.entries(cityCoordinates)) {
-    if (lower.includes(key) || key.includes(lower)) {
-      return coords
-    }
-  }
-  // Default to a random city if not found
-  const cities = Object.values(cityCoordinates)
-  return cities[Math.floor(Math.random() * cities.length)]
-}
-
-// Component to fit bounds to show all markers
+// Component to fit bounds
 function FitBounds({ trips }) {
   const map = useMap()
   
   useEffect(() => {
-    if (trips.length > 0) {
-      const bounds = L.latLngBounds([])
-      trips.forEach(trip => {
-        const coords = getCoordinates(trip.destination)
-        bounds.extend(coords)
-      })
-      map.fitBounds(bounds, { padding: [50, 50] })
+    if (trips && trips.length > 0) {
+      const bounds = trips
+        .filter(trip => trip.latitude && trip.longitude)
+        .map(trip => [trip.latitude, trip.longitude])
+      
+      if (bounds.length > 0) {
+        map.fitBounds(bounds, { padding: [50, 50] })
+      }
     }
   }, [trips, map])
   
   return null
 }
 
-function TripMap({ trips, onTripClick }) {
-  const defaultCenter = [20, 0]
-  const defaultZoom = 2
+function TripMap({ trips }) {
+  const [selectedTrip, setSelectedTrip] = useState(null)
+
+  // Filter trips with coordinates
+  const tripsWithCoords = trips.filter(trip => 
+    trip.latitude && trip.longitude
+  )
+
+  // Default center (Nairobi, Kenya)
+  const defaultCenter = [-1.286389, 36.817223]
+  const defaultZoom = 6
+
+  if (tripsWithCoords.length === 0) {
+    return (
+      <div style={{
+        padding: '2rem',
+        textAlign: 'center',
+        background: '#f9fafb',
+        borderRadius: '12px',
+        color: '#6b7280'
+      }}>
+        <span style={{ fontSize: '48px', display: 'block', marginBottom: '1rem' }}>🗺️</span>
+        <p>No trips with location data yet.</p>
+        <p style={{ fontSize: '13px', marginTop: '0.5rem' }}>
+          Add coordinates to your trips to see them on the map!
+        </p>
+      </div>
+    )
+  }
 
   return (
-    <div style={{
-      height: '500px',
-      borderRadius: '16px',
-      overflow: 'hidden',
-      boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
-      border: '1px solid rgba(139, 92, 246, 0.08)'
-    }}>
+    <div style={{ position: 'relative', height: '500px', width: '100%' }}>
       <MapContainer
         center={defaultCenter}
         zoom={defaultZoom}
-        style={{ height: '100%', width: '100%' }}
+        style={{
+          height: '100%',
+          width: '100%',
+          borderRadius: '12px',
+          zIndex: 1
+        }}
         scrollWheelZoom={true}
       >
         <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         
-        {trips.map((trip) => {
-          const coords = getCoordinates(trip.destination)
+        <FitBounds trips={tripsWithCoords} />
+
+        {tripsWithCoords.map((trip, index) => {
+          const colors = ['#E88D5C', '#8B5CF6', '#EC4899', '#22c55e', '#F59E0B', '#3B82F6']
+          const color = colors[index % colors.length]
+          
           return (
             <Marker
               key={trip.id}
-              position={coords}
+              position={[trip.latitude, trip.longitude]}
+              icon={createCustomIcon(color)}
               eventHandlers={{
-                click: () => {
-                  if (onTripClick) onTripClick(trip)
-                }
+                click: () => setSelectedTrip(trip)
               }}
             >
               <Popup>
-                <div style={{ padding: '0.5rem', maxWidth: '200px' }}>
-                  <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '16px' }}>
-                    🗺️ {trip.destination}
+                <div style={{ minWidth: '200px' }}>
+                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '16px', fontWeight: '700' }}>
+                    {trip.destination}
                   </h4>
-                  <p style={{ margin: '0.25rem 0', fontSize: '12px', color: '#666' }}>
+                  <p style={{ margin: '0.25rem 0', fontSize: '13px', color: '#6b7280' }}>
                     📅 {trip.duration_days} days
                   </p>
                   {trip.budget && (
-                    <p style={{ margin: '0.25rem 0', fontSize: '12px', color: '#666' }}>
+                    <p style={{ margin: '0.25rem 0', fontSize: '13px', color: '#6b7280' }}>
                       💰 ${trip.budget}
                     </p>
                   )}
+                  <p style={{ margin: '0.5rem 0 0 0', fontSize: '12px', color: '#9ca3af' }}>
+                    {trip.latitude}, {trip.longitude}
+                  </p>
                   <button
                     onClick={() => {
-                      if (onTripClick) onTripClick(trip)
+                      alert(`Trip: ${trip.destination}\nDuration: ${trip.duration_days} days\nBudget: $${trip.budget || 'Flexible'}`)
                     }}
                     style={{
                       marginTop: '0.5rem',
                       padding: '0.25rem 0.75rem',
-                      background: '#8B5CF6',
+                      background: '#E88D5C',
                       color: 'white',
                       border: 'none',
-                      borderRadius: '4px',
+                      borderRadius: '6px',
                       cursor: 'pointer',
                       fontSize: '12px'
                     }}
@@ -174,9 +155,26 @@ function TripMap({ trips, onTripClick }) {
             </Marker>
           )
         })}
-        
-        <FitBounds trips={trips} />
       </MapContainer>
+
+      {/* Legend */}
+      <div style={{
+        position: 'absolute',
+        bottom: '20px',
+        right: '20px',
+        background: 'white',
+        padding: '0.75rem 1rem',
+        borderRadius: '8px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        zIndex: 1000,
+        fontSize: '12px',
+        maxWidth: '200px'
+      }}>
+        <strong style={{ display: 'block', marginBottom: '0.25rem' }}>📍 Your Trips</strong>
+        <p style={{ margin: 0, color: '#6b7280' }}>
+          {tripsWithCoords.length} location{tripsWithCoords.length !== 1 ? 's' : ''} shown
+        </p>
+      </div>
     </div>
   )
 }

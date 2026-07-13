@@ -21,6 +21,8 @@ import WeatherWidget from '../components/WeatherWidget'
 import AdminDashboard from './AdminDashboard'
 import UserBookings from '../components/UserBookings'
 import UserTourPackages from '../components/UserTourPackages'
+import BookingDashboard from '../components/BookingDashboard'
+import SlidePanel from '../components/SlidePanel'
 
 // ============================================================
 // 2. MAIN COMPONENT
@@ -41,10 +43,12 @@ function Dashboard() {
   const [selectedTripForPhotos, setSelectedTripForPhotos] = useState(null)
   const [showCalendar, setShowCalendar] = useState(false)
   const [selectedTripForPacking, setSelectedTripForPacking] = useState(null)
+  const [userType, setUserType] = useState('tourist')
   const { darkMode } = useTheme()
   const [showAdmin, setShowAdmin] = useState(false)
-const [showBookings, setShowBookings] = useState(false)
-const [showTourPackages, setShowTourPackages] = useState(false)
+  const [showBookings, setShowBookings] = useState(false)
+  const [showTourPackages, setShowTourPackages] = useState(false)
+  const [showStats, setShowStats] = useState(false)
 
   // ============================================================
   // 2.2 FETCH USER DATA
@@ -55,6 +59,42 @@ const [showTourPackages, setShowTourPackages] = useState(false)
       setUser(user)
       
       if (user) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('user_type')
+          .eq('id', user.id)
+          .single()
+
+        console.log('Debug: fetched profile for user', user?.id, profile, profileError)
+
+        const rawType = profile?.user_type
+        const normalized = typeof rawType === 'string' ? rawType.trim().toLowerCase() : null
+
+        if (normalized === 'operator') {
+          try {
+            const { data: operatorRow, error: opError } = await supabase
+              .from('operators')
+              .select('is_verified')
+              .eq('id', user.id)
+              .single()
+
+            console.log('Debug: operator row', operatorRow, opError)
+
+            if (!opError && operatorRow?.is_verified) {
+              setUserType('operator')
+            } else {
+              setUserType('tourist')
+            }
+          } catch (err) {
+            console.error('Error checking operator verification:', err)
+            setUserType('tourist')
+          }
+        } else if (normalized === 'admin') {
+          setUserType('admin')
+        } else {
+          setUserType('tourist')
+        }
+        
         const { data, error } = await supabase
           .from('trips')
           .select('*')
@@ -124,7 +164,93 @@ const [showTourPackages, setShowTourPackages] = useState(false)
   // 2.5 PAGE VIEWS (Conditions)
   // ============================================================
 
-  // ---- Page: Trip Generator ----
+  // ---- Page: Operator Dashboard (if user is an operator) ----
+  if (userType === 'operator' && !showProfile && !showOperatorRegistration) {
+    return (
+      <div>
+        <Navbar user={user} onLogout={handleLogout} />
+        <div style={{
+          minHeight: '100vh',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
+          padding: '2rem'
+        }}>
+          <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '2rem',
+              gap: '1rem',
+              flexWrap: 'wrap'
+            }}>
+              <div>
+                <h1 style={{
+                  fontSize: '32px',
+                  fontWeight: 'bold',
+                  color: '#000',
+                  marginBottom: '0.5rem'
+                }}>
+                  🏢 Operator Dashboard
+                </h1>
+                <p style={{ color: '#666', fontSize: '16px' }}>
+                  Manage your tour packages and bookings
+                </p>
+              </div>
+              <button
+                onClick={() => { console.log('Dashboard: open profile panel'); setShowProfile(true) }}
+                style={{
+                  background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.75rem 1.5rem',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                👤 View Profile
+              </button>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr',
+              gap: '2rem'
+            }}>
+              <div style={{
+                background: 'white',
+                borderRadius: '16px',
+                padding: '2rem',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+              }}>
+                <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '1rem', color: '#000' }}>
+                  📦 Your Tour Packages
+                </h2>
+                <UserTourPackages user={user} />
+              </div>
+
+              <div style={{
+                background: 'white',
+                borderRadius: '16px',
+                padding: '2rem',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+              }}>
+                <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '1rem', color: '#000' }}>
+                  📋 Booking Dashboard
+                </h2>
+                <BookingDashboard user={user} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ============================================================
+  // 2.5 PAGE VIEWS (Conditions)
+  // ============================================================
   if (showTripGenerator) {
     return (
       <div>
@@ -136,7 +262,14 @@ const [showTourPackages, setShowTourPackages] = useState(false)
 
   // ---- Page: Profile ----
   if (showProfile) {
-    return <Profile user={user} onLogout={handleLogout} />
+    return (
+      <div>
+        <Navbar user={user} onLogout={handleLogout} />
+        <SlidePanel open={showProfile} onClose={() => { console.log('Dashboard: close profile panel'); setShowProfile(false) }} title="Your Profile">
+          <Profile user={user} onLogout={handleLogout} />
+        </SlidePanel>
+      </div>
+    )
   }
 
   // ---- Page: Operator Registration ----
@@ -144,31 +277,9 @@ const [showTourPackages, setShowTourPackages] = useState(false)
     return (
       <div>
         <Navbar user={user} onLogout={handleLogout} />
-        <div style={{
-          minHeight: '100vh',
-          background: darkMode ? '#0f0f1a' : '#f5f3ff',
-          padding: '2rem',
-          position: 'relative'
-        }}>
-          <div style={{ maxWidth: '600px', margin: '0 auto', paddingTop: '2rem' }}>
-            <button
-              onClick={() => setShowOperatorRegistration(false)}
-              style={{
-                background: 'transparent',
-                color: darkMode ? '#a1a1aa' : '#1a1a2e',
-                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
-                padding: '0.5rem 1.5rem',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                marginBottom: '1rem',
-                fontWeight: '600'
-              }}
-            >
-              ← Back to Dashboard
-            </button>
-            <OperatorRegistration user={user} onRegistered={() => setShowOperatorRegistration(false)} />
-          </div>
-        </div>
+        <SlidePanel open={showOperatorRegistration} onClose={() => { console.log('Dashboard: close operator registration'); setShowOperatorRegistration(false) }} title="Operator Registration">
+          <OperatorRegistration user={user} onRegistered={() => setShowOperatorRegistration(false)} />
+        </SlidePanel>
       </div>
     )
   }
@@ -368,9 +479,57 @@ if (selectedTripForPacking) {
   )
 }
 
-// ---- Page: Admin Dashboard ----
+// ---- Page: Admin Dashboard (PROTECTED) ----
 if (showAdmin) {
-  return <AdminDashboard user={user} onLogout={handleLogout} />
+  // Only admins can access
+  if (userType === 'admin') {
+    return <AdminDashboard user={user} onLogout={handleLogout} />
+  } else {
+    // Non-admin trying to access - show access denied
+    return (
+      <div>
+        <Navbar user={user} onLogout={handleLogout} />
+        <div style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
+          padding: '2rem'
+        }}>
+          <div style={{
+            background: darkMode ? '#1a1a2e' : 'white',
+            padding: '2rem',
+            borderRadius: '16px',
+            textAlign: 'center',
+            maxWidth: '400px',
+            width: '100%'
+          }}>
+            <span style={{ fontSize: '48px' }}>⛔</span>
+            <h2 style={{ marginTop: '1rem', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
+              Access Denied
+            </h2>
+            <p style={{ color: darkMode ? '#a1a1aa' : '#6b7280', margin: '0.5rem 0 1.5rem' }}>
+              You don't have admin privileges. Please contact the system administrator.
+            </p>
+            <button
+              onClick={() => setShowAdmin(false)}
+              style={{
+                padding: '0.5rem 1.5rem',
+                background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer'
+              }}
+            >
+              ← Back to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 }
 
 // ---- Page: ShowBookings ----
@@ -440,15 +599,92 @@ if (showTourPackages) {
   )
 }
 
+// ---- Page: ShowStats ----
+if (showStats) {
+  const totalTrips = trips.length
+  const uniqueDestinations = new Set(
+    trips
+      .map((trip) => trip.destination && trip.destination.toString().trim().toLowerCase())
+      .filter(Boolean)
+  ).size
+  const totalBudget = trips.reduce((sum, trip) => sum + (Number(trip.budget) || 0), 0)
+  const averageDuration = trips.length > 0
+    ? Math.round(trips.reduce((sum, trip) => sum + (Number(trip.duration_days) || 0), 0) / trips.length)
+    : 0
+  const upcomingTrips = trips.filter((trip) => {
+    if (!trip.departure_date) return false
+    return new Date(trip.departure_date) > new Date()
+  }).length
+
+  return (
+    <div>
+      <Navbar user={user} onLogout={handleLogout} />
+      <div style={{
+        minHeight: '100vh',
+        background: darkMode ? '#0f0f1a' : '#f5f3ff',
+        padding: '2rem'
+      }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+          <button
+            onClick={() => setShowStats(false)}
+            style={{
+              background: 'transparent',
+              color: darkMode ? '#a1a1aa' : '#1a1a2e',
+              border: '2px solid #1a1a2e',
+              padding: '0.5rem 1.5rem',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              marginBottom: '1rem',
+              fontWeight: '600'
+            }}
+          >
+            ← Back to Dashboard
+          </button>
+          <div style={{
+            background: darkMode ? '#1a1a2e' : 'white',
+            borderRadius: '16px',
+            padding: '2rem',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+            border: '1px solid rgba(26, 43, 60, 0.06)'
+          }}>
+            <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '1rem', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
+              📊 Your Stats
+            </h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+              <div style={{ background: darkMode ? '#111827' : '#f9fafb', borderRadius: '16px', padding: '1.5rem' }}>
+                <p style={{ marginBottom: '0.5rem', color: '#6b7280' }}>Total Trips</p>
+                <p style={{ fontSize: '32px', fontWeight: '700', color: '#8B5CF6' }}>{totalTrips}</p>
+              </div>
+              <div style={{ background: darkMode ? '#111827' : '#f9fafb', borderRadius: '16px', padding: '1.5rem' }}>
+                <p style={{ marginBottom: '0.5rem', color: '#6b7280' }}>Unique Destinations</p>
+                <p style={{ fontSize: '32px', fontWeight: '700', color: '#F59E0B' }}>{uniqueDestinations}</p>
+              </div>
+              <div style={{ background: darkMode ? '#111827' : '#f9fafb', borderRadius: '16px', padding: '1.5rem' }}>
+                <p style={{ marginBottom: '0.5rem', color: '#6b7280' }}>Average Duration</p>
+                <p style={{ fontSize: '32px', fontWeight: '700', color: '#22C55E' }}>{averageDuration} days</p>
+              </div>
+              <div style={{ background: darkMode ? '#111827' : '#f9fafb', borderRadius: '16px', padding: '1.5rem' }}>
+                <p style={{ marginBottom: '0.5rem', color: '#6b7280' }}>Upcoming Trips</p>
+                <p style={{ fontSize: '32px', fontWeight: '700', color: '#EF4444' }}>{upcomingTrips}</p>
+              </div>
+            </div>
+            <div style={{ marginTop: '2rem', color: '#6b7280' }}>
+              <p>{totalBudget > 0 ? `Total planned budget across trips: $${totalBudget.toLocaleString()}` : 'No trip budget data available yet.'}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
   // ============================================================
   // 2.6 MAIN DASHBOARD (Default View)
   // ============================================================
   return (
     <div>
-      {/* NAVBAR */}
       <Navbar user={user} onLogout={handleLogout} />
       
-      {/* MAIN CONTAINER */}
       <div className="dashboard-container" style={{
         minHeight: '100vh',
         background: darkMode 
@@ -458,7 +694,6 @@ if (showTourPackages) {
         position: 'relative'
       }}>
         
-        {/* CONTENT WRAPPER */}
         <div style={{
           position: 'relative',
           zIndex: 1,
@@ -466,9 +701,7 @@ if (showTourPackages) {
           margin: '0 auto'
         }}>
           
-          {/* ============================================================
-              2.6.1 WELCOME SECTION
-              ============================================================ */}
+          {/* Welcome Section */}
           <div style={{
             background: darkMode ? '#1a1a2e' : 'white',
             borderRadius: '16px',
@@ -519,9 +752,7 @@ if (showTourPackages) {
             </div>
           </div>
 
-          {/* ============================================================
-              2.6.2 QUICK ACTIONS GRID
-              ============================================================ */}
+          {/* Quick Actions Grid */}
           <div className="quick-actions" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -529,7 +760,6 @@ if (showTourPackages) {
             marginBottom: '2rem'
           }}>
             
-            {/* BUTTON: New Trip */}
             <button
               onClick={() => setShowTripGenerator(true)}
               style={{
@@ -557,36 +787,45 @@ if (showTourPackages) {
               <p style={{ fontSize: '13px', opacity: 0.8, color: 'white' }}>Plan with AI</p>
             </button>
 
-            {/* BUTTON: Become an Operator */}
             <button
               onClick={() => setShowOperatorRegistration(true)}
               style={{
-                background: darkMode ? '#1a1a2e' : 'white',
-                color: darkMode ? '#e4e4e7' : '#1a1a2e',
-                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+                color: 'white',
+                border: 'none',
                 padding: '1.5rem',
                 borderRadius: '16px',
                 textAlign: 'left',
                 width: '100%',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
-                background: 'white'
+                position: 'relative',
+                overflow: 'hidden'
               }}
               onMouseEnter={(e) => {
                 e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+                e.target.style.boxShadow = '0 12px 32px rgba(139, 92, 246, 0.3)'
               }}
               onMouseLeave={(e) => {
                 e.target.style.transform = 'translateY(0)'
                 e.target.style.boxShadow = 'none'
               }}
             >
+              <div style={{
+                position: 'absolute',
+                top: '-50%',
+                right: '-50%',
+                width: '200px',
+                height: '200px',
+                background: 'rgba(255,255,255,0.1)',
+                borderRadius: '50%',
+                pointerEvents: 'none'
+              }} />
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>🏢</span>
-              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>Become an Operator</h3>
-              <p style={{ fontSize: '13px', color: '#6b7280' }}>List your services</p>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem', color: 'white' }}>Become an Operator</h3>
+              <p style={{ fontSize: '13px', opacity: 0.9, color: 'white' }}>Start earning with your tours</p>
             </button>
 
-            {/* BUTTON: My Profile */}
             <button
               onClick={() => setShowProfile(true)}
               style={{
@@ -614,7 +853,6 @@ if (showTourPackages) {
               <p style={{ fontSize: '13px', color: '#6b7280' }}>Edit your info</p>
             </button>
 
-            {/* BUTTON: View Map */}
             <button
               onClick={() => setShowMap(true)}
               style={{
@@ -642,7 +880,6 @@ if (showTourPackages) {
               <p style={{ fontSize: '13px', color: '#6b7280' }}>See all trips</p>
             </button>
 
-            {/* BUTTON: Calendar */}
             <button
               onClick={() => setShowCalendar(true)}
               style={{
@@ -670,99 +907,122 @@ if (showTourPackages) {
               <p style={{ fontSize: '13px', color: '#6b7280' }}>View your trips</p>
             </button>
 
-                             {/* BUTTON: Admin*/}
-                              <button
-                              onClick={() => setShowAdmin(true)}
-                                style={{
-                           background: 'white',
-                             padding: '1.5rem',
-                          borderRadius: '16px',
-                         border: '1px solid rgba(139, 92, 246, 0.08)',
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
-                         cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                      textAlign: 'left'
-                       }}
-  onMouseEnter={(e) => {
-    e.target.style.transform = 'translateY(-4px)'
-    e.target.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.12)'
-  }}
-  onMouseLeave={(e) => {
-    e.target.style.transform = 'translateY(0)'
-    e.target.style.boxShadow = '0 4px 16px rgba(0,0,0,0.04)'
-  }}
->
-  <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📊</span>
-  <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>Admin Portal</h3>
-  <p style={{ fontSize: '13px', color: '#6b7280' }}>Manage your platform</p>
-</button>
+            {/* Admin Portal - ONLY visible to admins */}
+            {userType === 'admin' && (
+              <button
+                onClick={() => setShowAdmin(true)}
+                style={{
+                  background: 'linear-gradient(135deg, #8B5CF6, #6d28d9)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '1.5rem',
+                  borderRadius: '16px',
+                  textAlign: 'left',
+                  width: '100%',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.transform = 'translateY(-4px)'
+                  e.target.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.3)'
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.transform = 'translateY(0)'
+                  e.target.style.boxShadow = 'none'
+                }}
+              >
+                <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📊</span>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem', color: 'white' }}>Admin Portal</h3>
+                <p style={{ fontSize: '13px', opacity: 0.8, color: 'white' }}>Manage your platform</p>
+              </button>
+            )}
 
-{/* BUTTON: ShowBookings*/}
-<button
-  onClick={() => setShowBookings(true)}
-  style={{
-    background: darkMode ? '#1a1a2e' : 'white',
-    color: darkMode ? '#e4e4e7' : '#1a1a2e',
-    border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
-    padding: '1.5rem',
-    borderRadius: '16px',
-    textAlign: 'left',
-    width: '100%',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease'
-  }}
-  onMouseEnter={(e) => {
-    e.target.style.transform = 'translateY(-4px)'
-    e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
-  }}
-  onMouseLeave={(e) => {
-    e.target.style.transform = 'translateY(0)'
-    e.target.style.boxShadow = 'none'
-  }}
->
-  <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📋</span>
-  <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>My Bookings</h3>
-  <p style={{ fontSize: '13px', color: '#6b7280' }}>View and pay</p>
-</button>
+            <button
+              onClick={() => setShowBookings(true)}
+              style={{
+                background: darkMode ? '#1a1a2e' : 'white',
+                color: darkMode ? '#e4e4e7' : '#1a1a2e',
+                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                padding: '1.5rem',
+                borderRadius: '16px',
+                textAlign: 'left',
+                width: '100%',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.transform = 'translateY(-4px)'
+                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.transform = 'translateY(0)'
+                e.target.style.boxShadow = 'none'
+              }}
+            >
+              <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📋</span>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>My Bookings</h3>
+              <p style={{ fontSize: '13px', color: '#6b7280' }}>View and pay</p>
+            </button>
 
-{/* BUTTON: ShowTourPackages */}
-<button
-  onClick={() => setShowTourPackages(true)}
-  style={{
-    background: darkMode ? '#1a1a2e' : 'white',
-    color: darkMode ? '#e4e4e7' : '#1a1a2e',
-    border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
-    padding: '1.5rem',
-    borderRadius: '16px',
-    textAlign: 'left',
-    width: '100%',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease'
-  }}
->
-  <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>🏝️</span>
-  <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>Tour Packages</h3>
-  <p style={{ fontSize: '13px', color: '#6b7280' }}>Book your adventure</p>
-</button>
+            <button
+              onClick={() => setShowTourPackages(true)}
+              style={{
+                background: darkMode ? '#1a1a2e' : 'white',
+                color: darkMode ? '#e4e4e7' : '#1a1a2e',
+                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                padding: '1.5rem',
+                borderRadius: '16px',
+                textAlign: 'left',
+                width: '100%',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.transform = 'translateY(-4px)'
+                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.transform = 'translateY(0)'
+                e.target.style.boxShadow = 'none'
+              }}
+            >
+              <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>🏝️</span>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>Tour Packages</h3>
+              <p style={{ fontSize: '13px', color: '#6b7280' }}>Book your adventure</p>
+            </button>
 
-
-            {/* CARD: Stats */}
-            <div style={{
-              background: darkMode ? '#1a1a2e' : 'white',
-              borderRadius: '16px',
-              padding: '1.5rem',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
-              border: '1px solid rgba(26, 43, 60, 0.06)',
-              textAlign: 'left'
-            }}>
+            {/* Your Stats - Clickable */}
+            <button
+              onClick={() => setShowStats(true)}
+              style={{
+                background: darkMode ? '#1a1a2e' : 'white',
+                borderRadius: '16px',
+                padding: '1.5rem',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+                border: '1px solid rgba(26, 43, 60, 0.06)',
+                textAlign: 'left',
+                width: '100%',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                color: darkMode ? '#e4e4e7' : '#1a1a2e'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.transform = 'translateY(-4px)'
+                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.transform = 'translateY(0)'
+                e.target.style.boxShadow = '0 4px 20px rgba(0,0,0,0.04)'
+              }}
+            >
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📊</span>
               <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>Your Stats</h3>
               <p style={{ fontSize: '13px', color: '#6b7280' }}>
                 {trips.length} trip{trips.length !== 1 ? 's' : ''} planned
               </p>
-            </div>
+            </button>
 
-            {/* CARD: AI Assistant */}
+            {/* AI Assistant Card */}
             <div style={{
               background: darkMode ? '#1a1a2e' : 'white',
               borderRadius: '16px',
@@ -777,16 +1037,12 @@ if (showTourPackages) {
             </div>
           </div>
 
-          {/* ============================================================
-              2.6.3 CHATBOT SECTION
-              ============================================================ */}
+          {/* Chatbot Section */}
           <div style={{ marginBottom: '2rem' }}>
             <MockChatbot />
           </div>
 
-          {/* ============================================================
-              2.6.4 TRIP LIST SECTION
-              ============================================================ */}
+          {/* Trip List Section */}
           <h2 style={{
             fontSize: '22px',
             fontWeight: '700',
@@ -810,7 +1066,7 @@ if (showTourPackages) {
             </span>
           </h2>
 
-          {/* ---- EMPTY STATE (No Trips) ---- */}
+          {/* Empty State (No Trips) */}
           {trips.length === 0 ? (
             <div style={{
               background: darkMode ? '#1a1a2e' : 'white',
@@ -876,7 +1132,7 @@ if (showTourPackages) {
               </div>
             </div>
           ) : (
-            /* ---- TRIP CARDS (Travel Journal Style) ---- */
+            /* Trip Cards */
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               {trips.map((trip, index) => (
                 <motion.div
@@ -903,7 +1159,6 @@ if (showTourPackages) {
                     e.target.style.boxShadow = '0 4px 20px rgba(0,0,0,0.04)'
                   }}
                 >
-                  {/* Decorative corner accent */}
                   <div style={{
                     position: 'absolute',
                     top: 0,
@@ -915,7 +1170,6 @@ if (showTourPackages) {
                     opacity: 0.5
                   }} />
 
-                  {/* Trip Header with Destination */}
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -988,17 +1242,14 @@ if (showTourPackages) {
                     </div>
                   </div>
 
-               {/* Weather Widget */}
-               <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
-               <WeatherWidget destination={trip.destination} />
-              </div> 
+                  <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+                    <WeatherWidget destination={trip.destination} />
+                  </div>
 
-                  {/* Countdown Timer */}
                   <div style={{ marginBottom: '1rem' }}>
                     <TripCountdown trip={trip} />
                   </div>
 
-                  {/* Trip Actions */}
                   <div style={{
                     display: 'flex',
                     gap: '0.5rem',

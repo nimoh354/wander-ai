@@ -39,14 +39,18 @@ function OperatorRegistration({ user, onRegistered }) {
 
       if (operatorError) throw operatorError
 
-      setMessage('✅ Operator profile created successfully!')
-      if (onRegistered) onRegistered()
+      setMessage('✅ Operator profile created successfully! Redirecting to your operator dashboard...')
       
       // Reset form
       setBusinessName('')
       setDescription('')
       setPhone('')
       setWebsite('')
+      
+      // Wait 2 seconds then call onRegistered to show success message
+      setTimeout(() => {
+        if (onRegistered) onRegistered()
+      }, 2000)
     } catch (error) {
       setMessage(`❌ ${error.message}`)
     } finally {

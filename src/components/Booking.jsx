@@ -138,9 +138,14 @@ function Booking({ user, packageId, onBookingSuccess }) {
       setBookingData(data?.[0])
       setBookingConfirmed(true)
       setMessage('✅ Booking confirmed!')
-      
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('bookingCreated'))
+        localStorage.setItem('lastBookingCreated', JSON.stringify({ id: data?.[0]?.id, timestamp: Date.now() }))
+      }
+
       if (onBookingSuccess) {
-        onBookingSuccess()
+        onBookingSuccess(data?.[0])
       }
 
     } catch (error) {
