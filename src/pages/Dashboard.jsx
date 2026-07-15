@@ -260,18 +260,27 @@ function Dashboard() {
       </div>
     )
   }
-
-  // ---- Page: Profile ----
-  if (showProfile) {
-    return (
-      <div>
-        <Navbar user={user} onLogout={handleLogout} />
-        <SlidePanel open={showProfile} onClose={() => { console.log('Dashboard: close profile panel'); setShowProfile(false) }} title="Your Profile">
-          <Profile user={user} onLogout={handleLogout} />
-        </SlidePanel>
+  
+// ---- Page: Profile ----
+if (showProfile) {
+  return (
+    <div>
+      <Navbar user={user} onLogout={handleLogout} />
+      <div style={{
+        minHeight: '100vh',
+        background: darkMode ? '#0f0f1a' : '#f5f3ff',
+        padding: '2rem'
+      }}>
+        <Profile 
+          user={user} 
+          onLogout={handleLogout} 
+          onClose={() => setShowProfile(false)}
+          onProfileUpdate={loadTrips}
+        />
       </div>
-    )
-  }
+    </div>
+  )
+}
 
   // ---- Page: Operator Registration ----
   if (showOperatorRegistration) {

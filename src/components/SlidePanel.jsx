@@ -1,7 +1,26 @@
+// src/components/SlidePanel.jsx
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export default function SlidePanel({ open, onClose, title, children }) {
+  // Handle close with safety check
+  const handleClose = () => {
+    console.log('SlidePanel: Closing panel')
+    if (typeof onClose === 'function') {
+      onClose()
+    } else {
+      console.warn('SlidePanel: onClose is not a function', onClose)
+    }
+  }
+
+  // Handle backdrop click
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      console.log('SlidePanel: Backdrop clicked')
+      handleClose()
+    }
+  }
+
   return (
     <AnimatePresence>
       {open && (
@@ -15,13 +34,9 @@ export default function SlidePanel({ open, onClose, title, children }) {
             zIndex: 1200,
             display: 'flex',
             justifyContent: 'flex-end',
-            background: 'rgba(0,0,0,0.35)' 
+            background: 'rgba(0,0,0,0.35)'
           }}
-          onClick={() => {
-            console.log('SlidePanel: backdrop clicked')
-            if (typeof onClose === 'function') onClose()
-            else console.warn('SlidePanel: onClose not provided')
-          }}
+          onClick={handleBackdropClick}
         >
           <motion.div
             initial={{ x: '100%' }}
@@ -34,15 +49,22 @@ export default function SlidePanel({ open, onClose, title, children }) {
               height: '100vh',
               background: 'var(--panel-bg, white)',
               padding: '1.25rem 1.5rem',
-              boxShadow: ' -12px 0 30px rgba(0,0,0,0.12)',
+              boxShadow: '-12px 0 30px rgba(0,0,0,0.12)',
               overflowY: 'auto'
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            {/* Header */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              marginBottom: '1rem',
+              flexShrink: 0
+            }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <button
                   type="button"
-                  onClick={() => { console.log('SlidePanel: header back clicked'); if (typeof onClose === 'function') onClose() }}
+                  onClick={handleClose}
                   aria-label="Back to Dashboard"
                   style={{
                     background: 'transparent',
@@ -58,15 +80,38 @@ export default function SlidePanel({ open, onClose, title, children }) {
                 </button>
                 <h2 style={{ margin: 0 }}>{title}</h2>
               </div>
-              <button type="button" onClick={() => { console.log('SlidePanel: header close clicked'); if (typeof onClose === 'function') onClose() }} style={{ background: 'transparent', border: 'none', fontSize: '18px', cursor: 'pointer' }} aria-label="Close">✕</button>
+              <button 
+                type="button" 
+                onClick={handleClose} 
+                style={{ 
+                  background: 'transparent', 
+                  border: 'none', 
+                  fontSize: '18px', 
+                  cursor: 'pointer',
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: '8px'
+                }} 
+                aria-label="Close"
+              >
+                ✕
+              </button>
             </div>
+
+            {/* Content */}
             <div>
               {children}
             </div>
-            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center' }}>
+
+            {/* Footer */}
+            <div style={{ 
+              marginTop: '1.5rem', 
+              display: 'flex', 
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
               <button
                 type="button"
-                onClick={() => { console.log('SlidePanel: footer back clicked'); if (typeof onClose === 'function') onClose() }}
+                onClick={handleClose}
                 style={{
                   background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
                   color: 'white',
