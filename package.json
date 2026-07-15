@@ -3,11 +3,14 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-     "vercel-build": "node node_modules/vite/bin/vite.js build"
+    "vercel-build": "node node_modules/vite/bin/vite.js build"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
@@ -16,7 +19,7 @@
     "@supabase/supabase-js": "^2.108.2",
     "framer-motion": "^12.42.2",
     "leaflet": "^1.9.4",
-    "lucide-react": "^1.23.0",
+    "lucide-react": "^0.469.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",
@@ -28,8 +31,5 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "vite": "^5.4.0"
-  },
-  "engines": {
-    "node": "20.x"
   }
 }

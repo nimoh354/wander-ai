@@ -1,3 +1,7 @@
+@import 'leaflet/dist/leaflet.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;600;700&display=swap');
 
 :root {
@@ -483,7 +487,7 @@ input:focus, textarea:focus, select:focus {
   to { opacity: 1; transform: translateY(0); }
 }
 /* src/index.css - Add at the very top */
-@import 'leaflet/dist/leaflet.css';
+
 
 /* Leaflet container fix */
 .leaflet-container {
