@@ -2,26 +2,28 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../context/ThemeContext'
-import Users from 'lucide-react/dist/esm/icons/users.mjs'
-import Calendar from 'lucide-react/dist/esm/icons/calendar.mjs'
-import DollarSign from 'lucide-react/dist/esm/icons/dollar-sign.mjs'
-import Star from 'lucide-react/dist/esm/icons/star.mjs'
-import TrendingUp from 'lucide-react/dist/esm/icons/trending-up.mjs'
-import Package from 'lucide-react/dist/esm/icons/package.mjs'
-import BookOpen from 'lucide-react/dist/esm/icons/book-open.mjs'
-import BarChart3 from 'lucide-react/dist/esm/icons/bar-chart-3.mjs'
-import Search from 'lucide-react/dist/esm/icons/search.mjs'
-import Download from 'lucide-react/dist/esm/icons/download.mjs'
-import Edit from 'lucide-react/dist/esm/icons/edit.mjs'
-import Trash2 from 'lucide-react/dist/esm/icons/trash-2.mjs'
-import CheckCircle from 'lucide-react/dist/esm/icons/check-circle.mjs'
-import XCircle from 'lucide-react/dist/esm/icons/x-circle.mjs'
-import Clock from 'lucide-react/dist/esm/icons/clock.mjs'
-import Plus from 'lucide-react/dist/esm/icons/plus.mjs'
-import Menu from 'lucide-react/dist/esm/icons/menu.mjs'
-import LayoutDashboard from 'lucide-react/dist/esm/icons/layout-dashboard.mjs'
-import LogOut from 'lucide-react/dist/esm/icons/log-out.mjs'
-import Activity from 'lucide-react/dist/esm/icons/activity.mjs'
+import {
+  Users,
+  Calendar,
+  DollarSign,
+  Star,
+  TrendingUp,
+  Package,
+  BookOpen,
+  BarChart3,
+  Search,
+  Download,
+  Edit,
+  Trash2,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Plus,
+  Menu,
+  LayoutDashboard,
+  LogOut,
+  Activity
+} from 'lucide-react'
 import Inventory from '../components/Inventory'
 
 function AdminDashboard({ user, onLogout }) {
