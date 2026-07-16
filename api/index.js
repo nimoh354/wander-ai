@@ -1,10 +1,8 @@
-// api/index.js
 import express from 'express';
 import Stripe from 'stripe';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
-// Load env for local development
 dotenv.config();
 
 const app = express();
@@ -19,9 +17,8 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// ✅ Your existing payment intent logic
+// Payment intent endpoint
 app.post('/api/create-payment-intent', async (req, res) => {
-  // ✅ Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -29,14 +26,12 @@ app.post('/api/create-payment-intent', async (req, res) => {
   try {
     const { amount, bookingId } = req.body;
 
-    // ✅ Validate inputs
     if (!amount || !bookingId) {
       return res.status(400).json({ 
         error: 'Missing required fields: amount and bookingId' 
       });
     }
 
-    // ✅ Create Payment Intent
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amount,
       currency: 'usd',
@@ -44,7 +39,6 @@ app.post('/api/create-payment-intent', async (req, res) => {
       description: `Booking ${bookingId}`
     });
 
-    // ✅ Return client secret
     res.status(200).json({
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id
@@ -58,5 +52,9 @@ app.post('/api/create-payment-intent', async (req, res) => {
   }
 });
 
-// Export for Vercel
+// Health check endpoint (optional)
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 export default app;

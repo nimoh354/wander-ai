@@ -1,4 +1,3 @@
-// src/components/StripePayment.jsx
 import React, { useState, useEffect } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js'
@@ -36,10 +35,9 @@ function CheckoutForm({ bookingId, amount, onSuccess, onError }) {
       try {
         console.log('🔐 Creating payment intent for booking:', bookingId)
         
-        // ✅ Dynamic API URL - works locally AND on Vercel
         const apiUrl = import.meta.env.PROD 
-          ? '/api/create-payment-intent'  // Vercel serverless function
-          : 'http://localhost:3000/api/create-payment-intent'  // Local server (FIXED PORT)
+          ? '/api/create-payment-intent'
+          : 'http://localhost:3000/api/create-payment-intent'
 
         console.log(`📡 Calling API: ${apiUrl}`)
 
@@ -49,7 +47,7 @@ function CheckoutForm({ bookingId, amount, onSuccess, onError }) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ 
-            amount: Math.round(amount * 100), // Convert to cents
+            amount: Math.round(amount * 100),
             bookingId: bookingId 
           })
         })
@@ -63,7 +61,7 @@ function CheckoutForm({ bookingId, amount, onSuccess, onError }) {
         setClientSecret(data.clientSecret)
         console.log('✅ Payment intent created:', data.paymentIntentId)
       } catch (err) {
-        console.error('❌ Error creating payment intent:', err)
+        console.error('❌ Error:', err)
         setError(err.message)
         onError?.(err.message)
       } finally {
@@ -108,20 +106,19 @@ function CheckoutForm({ bookingId, amount, onSuccess, onError }) {
       console.log('✅ Payment successful:', paymentIntent)
 
       if (paymentIntent.status === 'succeeded') {
-        // ✅ Update booking status in Supabase
         const { error: updateError } = await supabase
           .from('tour_bookings')
           .update({ 
             status: 'confirmed', 
             payment_status: 'paid',
             paid_at: new Date().toISOString(),
-            stripe_payment_intent_id: paymentIntent.id // Store the payment ID
+            stripe_payment_intent_id: paymentIntent.id
           })
           .eq('id', bookingId)
 
         if (updateError) {
-          console.error('❌ Supabase update error:', updateError)
-          throw new Error('Payment succeeded but failed to update booking')
+          console.error('❌ Update error:', updateError)
+          throw new Error('Failed to update booking status')
         }
 
         onSuccess?.({ 
