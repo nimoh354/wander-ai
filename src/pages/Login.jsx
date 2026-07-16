@@ -1,5 +1,5 @@
 // src/pages/Login.jsx
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../context/ThemeContext'
 import { sendVerificationEmail } from '../services/emailService'
@@ -11,28 +11,7 @@ function Login() {
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
-  const [debug, setDebug] = useState([])
   const { darkMode } = useTheme()
-
-  const addDebug = (label, data) => {
-    setDebug(prev => [...prev, { time: new Date().toLocaleTimeString(), label, data: JSON.stringify(data, null, 2) }])
-  }
-
-  useEffect(() => {
-    const checkSupabase = async () => {
-      try {
-        const { data, error } = await supabase.auth.getSession()
-        if (error) {
-          addDebug('⚠️ Supabase connection error', error)
-        } else {
-          addDebug('Supabase connected', { session: data.session ? 'exists' : 'none' })
-        }
-      } catch (err) {
-        addDebug('Supabase connection failed', err.message)
-      }
-    }
-    checkSupabase()
-  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -58,15 +37,13 @@ function Login() {
         }
 
         if (data.user) {
+          // Send verification email
           try {
-            const result = await sendVerificationEmail(
+            await sendVerificationEmail(
               email,
               email.split('@')[0] || 'Traveler',
               `${window.location.origin}/login?email=${encodeURIComponent(email)}`
             )
-            if (!result.success) {
-              console.warn('Email error:', result.error)
-            }
           } catch (emailErr) {
             console.warn('Email error:', emailErr.message)
           }
@@ -369,7 +346,6 @@ function Login() {
             setIsSignUp(!isSignUp)
             setMessage('')
             setMessageType('')
-            setDebug([])
           }}
           style={{
             width: '100%',
@@ -384,65 +360,6 @@ function Login() {
         >
           {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
         </button>
-
-        {debug.length > 0 && (
-          <div style={{
-            marginTop: '1.5rem',
-            padding: '0.75rem',
-            background: darkMode ? '#0f0f1a' : '#f8fafc',
-            borderRadius: '8px',
-            border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0'}`,
-            maxHeight: '200px',
-            overflow: 'auto',
-            fontSize: '11px',
-            fontFamily: 'monospace'
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '0.5rem'
-            }}>
-              <strong style={{ color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>Debug Log</strong>
-              <button
-                onClick={() => setDebug([])}
-                style={{
-                  padding: '0.15rem 0.5rem',
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#ef4444',
-                  cursor: 'pointer',
-                  fontSize: '11px'
-                }}
-              >
-                Clear
-              </button>
-            </div>
-            {debug.map((item, index) => (
-              <div key={index} style={{
-                padding: '0.2rem 0',
-                borderBottom: index < debug.length - 1 ? `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : '#e2e8f0'}` : 'none',
-                color: darkMode ? '#a1a1aa' : '#4b5563'
-              }}>
-                <span style={{ color: '#6b7280', fontSize: '10px' }}>[{item.time}]</span>
-                <span style={{ marginLeft: '0.5rem', fontWeight: '600' }}>{item.label}</span>
-                <div style={{
-                  padding: '0.15rem 0.3rem',
-                  marginTop: '0.15rem',
-                  background: darkMode ? 'rgba(255,255,255,0.03)' : '#f1f5f9',
-                  borderRadius: '4px',
-                  fontSize: '10px',
-                  color: darkMode ? '#94a3b8' : '#64748b',
-                  wordBreak: 'break-all',
-                  maxHeight: '60px',
-                  overflow: 'auto'
-                }}>
-                  {item.data}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   )
