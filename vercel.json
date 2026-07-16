@@ -2,12 +2,21 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "devCommand": "npm run dev",
-  "installCommand": "npm install --legacy-peer-deps",
+  "installCommand": "npm ci",
   "framework": "vite",
   "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "dest": "/api"
+    },
     {
       "source": "/(.*)",
       "dest": "/index.html"
     }
-  ]
+  ],
+  "functions": {
+    "api/index.js": {
+      "runtime": "nodejs24.x"
+    }
+  }
 }
