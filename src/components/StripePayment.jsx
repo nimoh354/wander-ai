@@ -36,8 +36,12 @@ function CheckoutForm({ bookingId, amount, onSuccess, onError }) {
       try {
         console.log('🔐 Creating payment intent for booking:', bookingId)
         
-        // ✅ Call Vercel Serverless Function
-        const response = await fetch('/api/create-payment-intent', {
+        // ✅ Use local server for development, Vercel for production
+        const apiUrl = import.meta.env.PROD 
+          ? '/api/create-payment-intent'  // Vercel serverless function
+          : 'http://localhost:3001/api/create-payment-intent'  // Local server
+
+        const response = await fetch(apiUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -102,7 +106,6 @@ function CheckoutForm({ bookingId, amount, onSuccess, onError }) {
       console.log('✅ Payment successful:', paymentIntent)
 
       if (paymentIntent.status === 'succeeded') {
-        // ✅ Update booking in Supabase
         const { error: updateError } = await supabase
           .from('tour_bookings')
           .update({ 

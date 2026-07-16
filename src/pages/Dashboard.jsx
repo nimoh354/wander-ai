@@ -23,6 +23,7 @@ import UserBookings from '../components/UserBookings'
 import UserTourPackages from '../components/UserTourPackages'
 import BookingDashboard from '../components/BookingDashboard'
 import SlidePanel from '../components/SlidePanel'
+import MyReviews from './MyReviews'
 
 // ============================================================
 // 2. MAIN COMPONENT
@@ -50,89 +51,318 @@ function Dashboard() {
   const [showTourPackages, setShowTourPackages] = useState(false)
   const [showStats, setShowStats] = useState(false)
   const [selectedTripItinerary, setSelectedTripItinerary] = useState(null)
+  const [reviews, setReviews] = useState([])
+  const [showMyReviews, setShowMyReviews] = useState(false)
+  const [fetchError, setFetchError] = useState(null)
+  const [allReviews, setAllReviews] = useState([]) // New state for public reviews
 
   // ============================================================
   // 2.2 FETCH USER DATA
   // ============================================================
   useEffect(() => {
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
-      
-      if (user) {
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('user_type')
-          .eq('id', user.id)
-          .single()
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        setUser(user)
+        
+        if (user) {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('user_type')
+            .eq('id', user.id)
+            .single()
 
-        console.log('Debug: fetched profile for user', user?.id, profile, profileError)
+          console.log('Debug: fetched profile for user', user?.id, profile, profileError)
 
-        const rawType = profile?.user_type
-        const normalized = typeof rawType === 'string' ? rawType.trim().toLowerCase() : null
+          const rawType = profile?.user_type
+          const normalized = typeof rawType === 'string' ? rawType.trim().toLowerCase() : null
 
-        if (normalized === 'operator') {
-          try {
-            const { data: operatorRow, error: opError } = await supabase
-              .from('operators')
-              .select('is_verified')
-              .eq('id', user.id)
-              .single()
+          if (normalized === 'operator') {
+            try {
+              const { data: operatorRow, error: opError } = await supabase
+                .from('operators')
+                .select('is_verified')
+                .eq('id', user.id)
+                .single()
 
-            console.log('Debug: operator row', operatorRow, opError)
+              console.log('Debug: operator row', operatorRow, opError)
 
-            if (!opError && operatorRow?.is_verified) {
-              setUserType('operator')
-            } else {
+              if (!opError && operatorRow?.is_verified) {
+                setUserType('operator')
+              } else {
+                setUserType('tourist')
+              }
+            } catch (err) {
+              console.error('Error checking operator verification:', err)
               setUserType('tourist')
             }
-          } catch (err) {
-            console.error('Error checking operator verification:', err)
+          } else if (normalized === 'admin') {
+            setUserType('admin')
+          } else {
             setUserType('tourist')
           }
-        } else if (normalized === 'admin') {
-          setUserType('admin')
-        } else {
-          setUserType('tourist')
+          
+          // Fetch trips and reviews
+          await loadTrips(user.id)
+          await loadAllReviews() // Load public reviews
         }
-        
-        const { data, error } = await supabase
-          .from('trips')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-        
-        if (!error) {
-          setTrips(data || [])
-        }
+        setLoading(false)
+      } catch (error) {
+        console.error('Error in getUser:', error)
+        setFetchError('Failed to load user data')
+        setLoading(false)
       }
-      setLoading(false)
     }
     
     getUser()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ============================================================
-  // 2.3 HELPER FUNCTIONS
-  // ============================================================
-  const handleLogout = async () => {
+// 2.4 HELPER FUNCTIONS (UPDATED FIX)
+// ============================================================
+const handleLogout = async () => {
+  try {
     await supabase.auth.signOut()
     window.location.reload()
+  } catch (error) {
+    console.error('Error logging out:', error)
   }
+}
 
-  const loadTrips = async () => {
-    if (!user) return
-    const { data, error } = await supabase
+const loadTrips = async (userId = null) => {
+  const currentUserId = userId || user?.id
+  if (!currentUserId) return
+  
+  try {
+    setFetchError(null)
+    
+    const { data: tripsData, error: tripsError } = await supabase
       .from('trips')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', currentUserId)
       .order('created_at', { ascending: false })
     
-    if (!error) {
-      setTrips(data || [])
+    if (!tripsError && tripsData) {
+      setTrips(tripsData || [])
+      console.log(`✅ Loaded ${tripsData.length} trips`)
+    } else if (tripsError) {
+      console.error('Error fetching trips:', tripsError)
+      setFetchError('Failed to load trips')
     }
+    
+    // APPROACH 1: Try the simplest syntax first (most likely to work)
+    const { data: reviewsData, error: reviewsError } = await supabase
+      .from('trip_reviews')
+      .select(`
+        *,
+        profiles:user_id (
+          full_name,
+          email
+        )
+      `)
+      .eq('user_id', currentUserId)
+      .order('created_at', { ascending: false })
+    
+    if (!reviewsError && reviewsData) {
+      setReviews(reviewsData || [])
+      console.log(`✅ Loaded ${reviewsData.length} personal reviews`)
+    } else {
+      console.log('Approach 1 failed, trying approach 2...')
+      
+      // APPROACH 2: Use the foreign key name pattern
+      const { data: reviewsData2, error: reviewsError2 } = await supabase
+        .from('trip_reviews')
+        .select(`
+          *,
+          profiles!user_id (
+            full_name,
+            email
+          )
+        `)
+        .eq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+      
+      if (!reviewsError2 && reviewsData2) {
+        setReviews(reviewsData2 || [])
+        console.log(`✅ Loaded ${reviewsData2.length} personal reviews`)
+      } else {
+        console.log('Approach 2 failed, trying approach 3...')
+        
+        // APPROACH 3: Try without the foreign key join
+        const { data: reviewsData3, error: reviewsError3 } = await supabase
+          .from('trip_reviews')
+          .select('*')
+          .eq('user_id', currentUserId)
+          .order('created_at', { ascending: false })
+        
+        if (!reviewsError3 && reviewsData3) {
+          // Fetch profile data separately
+          const profileIds = [...new Set(reviewsData3.map(r => r.user_id).filter(Boolean))]
+          let profilesMap = {}
+          if (profileIds.length > 0) {
+            const { data: profilesData } = await supabase
+              .from('profiles')
+              .select('id, full_name, email')
+              .in('id', profileIds)
+            
+            if (profilesData) {
+              profilesMap = profilesData.reduce((acc, p) => {
+                acc[p.id] = p
+                return acc
+              }, {})
+            }
+          }
+          
+          const combinedData = reviewsData3.map(review => ({
+            ...review,
+            profiles: profilesMap[review.user_id] || null
+          }))
+          
+          setReviews(combinedData)
+          console.log(`✅ Loaded ${combinedData.length} personal reviews (fallback method)`)
+        } else {
+          console.error('All approaches failed for personal reviews:', reviewsError3)
+          setReviews([])
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in loadTrips:', error)
+    setFetchError('An unexpected error occurred')
   }
+}
 
+// UPDATED: Public reviews with multiple approaches
+const loadAllReviews = async () => {
+  try {
+    // APPROACH 1: Try simplest syntax
+    const { data, error } = await supabase
+      .from('trip_reviews')
+      .select(`
+        *,
+        profiles:user_id (
+          full_name,
+          email
+        ),
+        trips:trip_id (
+          destination,
+          user_id
+        )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (!error && data) {
+      setAllReviews(data || [])
+      console.log(`✅ Loaded ${data.length} public reviews`)
+      return
+    } else {
+      console.log('Approach 1 failed for public reviews, trying approach 2...')
+      
+      // APPROACH 2: Try with foreign key pattern
+      const { data: data2, error: error2 } = await supabase
+        .from('trip_reviews')
+        .select(`
+          *,
+          profiles!user_id (
+            full_name,
+            email
+          ),
+          trips!trip_id (
+            destination,
+            user_id
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      
+      if (!error2 && data2) {
+        setAllReviews(data2 || [])
+        console.log(`✅ Loaded ${data2.length} public reviews`)
+        return
+      } else {
+        console.log('Approach 2 failed for public reviews, using fallback...')
+        await loadAllReviewsFallback()
+      }
+    }
+  } catch (error) {
+    console.error('Error in loadAllReviews:', error)
+    await loadAllReviewsFallback()
+  }
+}
+
+// FALLBACK: Fetch public reviews without joins
+const loadAllReviewsFallback = async () => {
+  try {
+    console.log('Using fallback method to fetch public reviews...')
+    
+    // Fetch all reviews
+    const { data: reviewsData, error: reviewsError } = await supabase
+      .from('trip_reviews')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    if (reviewsError) {
+      console.error('Error in fallback fetch:', reviewsError)
+      setAllReviews([])
+      return
+    }
+
+    if (!reviewsData || reviewsData.length === 0) {
+      setAllReviews([])
+      return
+    }
+
+    // Fetch profile data for each review
+    const userIds = [...new Set(reviewsData.map(r => r.user_id).filter(Boolean))]
+    let profilesMap = {}
+    if (userIds.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', userIds)
+
+      if (!profilesError && profilesData) {
+        profilesMap = profilesData.reduce((acc, p) => {
+          acc[p.id] = p
+          return acc
+        }, {})
+      }
+    }
+
+    // Fetch trip data for each review
+    const tripIds = [...new Set(reviewsData.map(r => r.trip_id).filter(Boolean))]
+    let tripsMap = {}
+    if (tripIds.length > 0) {
+      const { data: tripsData, error: tripsError } = await supabase
+        .from('trips')
+        .select('id, destination, user_id')
+        .in('id', tripIds)
+
+      if (!tripsError && tripsData) {
+        tripsMap = tripsData.reduce((acc, t) => {
+          acc[t.id] = t
+          return acc
+        }, {})
+      }
+    }
+
+    // Combine the data
+    const combinedData = reviewsData.map(review => ({
+      ...review,
+      profiles: profilesMap[review.user_id] || null,
+      trips: tripsMap[review.trip_id] || null
+    }))
+
+    setAllReviews(combinedData)
+    console.log(`✅ Loaded ${combinedData.length} public reviews (fallback method)`)
+  } catch (error) {
+    console.error('Error in loadAllReviewsFallback:', error)
+    setAllReviews([])
+  }
+}
   // ============================================================
   // 2.4 LOADING SCREEN
   // ============================================================
@@ -165,7 +395,7 @@ function Dashboard() {
   // 2.5 PAGE VIEWS (Conditions)
   // ============================================================
 
-  // ---- Page: Operator Dashboard (if user is an operator) ----
+  // ---- Page: Operator Dashboard ----
   if (userType === 'operator' && !showProfile && !showOperatorRegistration) {
     return (
       <div>
@@ -249,46 +479,63 @@ function Dashboard() {
     )
   }
 
-  // ============================================================
-  // 2.5 PAGE VIEWS (Conditions)
-  // ============================================================
+  // ---- Page: Trip Generator ----
   if (showTripGenerator) {
     return (
       <div>
         <Navbar user={user} onLogout={handleLogout} />
-        <TripGenerator user={user} onTripSaved={loadTrips} />
+        <TripGenerator 
+          user={user} 
+          onTripSaved={() => {
+            loadTrips()
+            setShowTripGenerator(false)
+          }} 
+        />
       </div>
     )
   }
-  
-// ---- Page: Profile ----
-if (showProfile) {
-  return (
-    <div>
-      <Navbar user={user} onLogout={handleLogout} />
-      <div style={{
-        minHeight: '100vh',
-        background: darkMode ? '#0f0f1a' : '#f5f3ff',
-        padding: '2rem'
-      }}>
-        <Profile 
-          user={user} 
-          onLogout={handleLogout} 
-          onClose={() => setShowProfile(false)}
-          onProfileUpdate={loadTrips}
-        />
+
+  // ---- Page: Profile ----
+  if (showProfile) {
+    return (
+      <div>
+        <Navbar user={user} onLogout={handleLogout} />
+        <div style={{
+          minHeight: '100vh',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
+          padding: '2rem'
+        }}>
+          <Profile 
+            user={user} 
+            onLogout={handleLogout} 
+            onClose={() => setShowProfile(false)}
+            onProfileUpdate={() => loadTrips()}
+          />
+        </div>
       </div>
-    </div>
-  )
-}
+    )
+  }
 
   // ---- Page: Operator Registration ----
   if (showOperatorRegistration) {
     return (
       <div>
         <Navbar user={user} onLogout={handleLogout} />
-        <SlidePanel open={showOperatorRegistration} onClose={() => { console.log('Dashboard: close operator registration'); setShowOperatorRegistration(false) }} title="Operator Registration">
-          <OperatorRegistration user={user} onRegistered={() => setShowOperatorRegistration(false)} />
+        <SlidePanel 
+          open={showOperatorRegistration} 
+          onClose={() => { 
+            console.log('Dashboard: close operator registration'); 
+            setShowOperatorRegistration(false) 
+          }} 
+          title="Operator Registration"
+        >
+          <OperatorRegistration 
+            user={user} 
+            onRegistered={() => {
+              setShowOperatorRegistration(false)
+              setUserType('operator')
+            }} 
+          />
         </SlidePanel>
       </div>
     )
@@ -315,7 +562,7 @@ if (showProfile) {
               style={{
                 background: 'transparent',
                 color: darkMode ? '#a1a1aa' : '#1a1a2e',
-                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                border: `2px solid ${darkMode ? '#2d2d44' : '#1a1a2e'}`,
                 padding: '0.5rem 1.5rem',
                 borderRadius: '8px',
                 cursor: 'pointer',
@@ -360,7 +607,7 @@ if (showProfile) {
               style={{
                 background: 'transparent',
                 color: darkMode ? '#a1a1aa' : '#1a1a2e',
-                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                border: `2px solid ${darkMode ? '#2d2d44' : '#1a1a2e'}`,
                 padding: '0.5rem 1.5rem',
                 borderRadius: '8px',
                 cursor: 'pointer',
@@ -404,7 +651,7 @@ if (showProfile) {
                 style={{
                   background: 'transparent',
                   color: darkMode ? '#a1a1aa' : '#1a1a2e',
-                  border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                  border: `2px solid ${darkMode ? '#2d2d44' : '#1a1a2e'}`,
                   padding: '0.5rem 1.5rem',
                   borderRadius: '8px',
                   cursor: 'pointer',
@@ -451,7 +698,7 @@ if (showProfile) {
               style={{
                 background: 'transparent',
                 color: darkMode ? '#a1a1aa' : '#1a1a2e',
-                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                border: `2px solid ${darkMode ? '#2d2d44' : '#1a1a2e'}`,
                 padding: '0.5rem 1.5rem',
                 borderRadius: '8px',
                 cursor: 'pointer',
@@ -491,11 +738,9 @@ if (showProfile) {
 
   // ---- Page: Admin Dashboard (PROTECTED) ----
   if (showAdmin) {
-    // Only admins can access
     if (userType === 'admin') {
       return <AdminDashboard user={user} onLogout={handleLogout} />
     } else {
-      // Non-admin trying to access - show access denied
       return (
         <div>
           <Navbar user={user} onLogout={handleLogout} />
@@ -687,6 +932,11 @@ if (showProfile) {
     )
   }
 
+  // ---- Page: My Reviews ----
+  if (showMyReviews) {
+    return <MyReviews user={user} onLogout={handleLogout} />
+  }
+
   // ============================================================
   // ITINERARY MODAL
   // ============================================================
@@ -708,7 +958,7 @@ if (showProfile) {
               style={{
                 background: 'transparent',
                 color: darkMode ? '#a1a1aa' : '#1a1a2e',
-                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                border: `2px solid ${darkMode ? '#2d2d44' : '#1a1a2e'}`,
                 padding: '0.5rem 1.5rem',
                 borderRadius: '8px',
                 cursor: 'pointer',
@@ -726,7 +976,6 @@ if (showProfile) {
               border: `2px solid ${darkMode ? 'rgba(255,255,255,0.05)' : '#e5e7eb'}`,
               boxShadow: '0 4px 20px rgba(0,0,0,0.04)'
             }}>
-              {/* Lock Icon Header */}
               <div style={{
                 display: 'flex',
                 justifyContent: 'center',
@@ -747,7 +996,6 @@ if (showProfile) {
                 </div>
               </div>
 
-              {/* Destination Header */}
               <h2 style={{
                 fontSize: '28px',
                 fontWeight: '700',
@@ -759,7 +1007,6 @@ if (showProfile) {
                 {trip.destination}
               </h2>
 
-              {/* Flight & Hotel Details */}
               {itinerary && (
                 <div style={{
                   display: 'grid',
@@ -809,7 +1056,6 @@ if (showProfile) {
                 </div>
               )}
 
-              {/* Itinerary Days */}
               <div style={{ marginBottom: '1.5rem' }}>
                 {itinerary?.days && itinerary.days.map((day, index) => (
                   <div
@@ -853,7 +1099,6 @@ if (showProfile) {
                 ))}
               </div>
 
-              {/* Travel Tips */}
               {itinerary?.tips && itinerary.tips.length > 0 && (
                 <div style={{
                   marginTop: '1rem',
@@ -872,7 +1117,6 @@ if (showProfile) {
                 </div>
               )}
 
-              {/* Back Button */}
               <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center' }}>
                 <button
                   onClick={() => setSelectedTripItinerary(null)}
@@ -920,6 +1164,33 @@ if (showProfile) {
           margin: '0 auto'
         }}>
           
+          {/* Error Message */}
+          {fetchError && (
+            <div style={{
+              background: '#fee2e2',
+              color: '#991b1b',
+              padding: '1rem',
+              borderRadius: '12px',
+              marginBottom: '1rem',
+              border: '1px solid #fecaca'
+            }}>
+              ⚠️ {fetchError}
+              <button
+                onClick={() => setFetchError(null)}
+                style={{
+                  marginLeft: '1rem',
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#991b1b',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
           {/* Welcome Section */}
           <div style={{
             background: darkMode ? '#1a1a2e' : 'white',
@@ -993,12 +1264,12 @@ if (showProfile) {
                 transition: 'all 0.2s ease'
               }}
               onMouseEnter={(e) => {
-                e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 8px 24px rgba(232, 141, 92, 0.3)'
+                e.currentTarget.style.transform = 'translateY(-4px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(232, 141, 92, 0.3)'
               }}
               onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)'
-                e.target.style.boxShadow = 'none'
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
               }}
             >
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>✨</span>
@@ -1022,12 +1293,12 @@ if (showProfile) {
                 overflow: 'hidden'
               }}
               onMouseEnter={(e) => {
-                e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 12px 32px rgba(139, 92, 246, 0.3)'
+                e.currentTarget.style.transform = 'translateY(-4px)'
+                e.currentTarget.style.boxShadow = '0 12px 32px rgba(139, 92, 246, 0.3)'
               }}
               onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)'
-                e.target.style.boxShadow = 'none'
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
               }}
             >
               <div style={{
@@ -1050,7 +1321,7 @@ if (showProfile) {
               style={{
                 background: darkMode ? '#1a1a2e' : 'white',
                 color: darkMode ? '#e4e4e7' : '#1a1a2e',
-                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                border: `2px solid ${darkMode ? '#2d2d44' : '#1a1a2e'}`,
                 padding: '1.5rem',
                 borderRadius: '16px',
                 textAlign: 'left',
@@ -1059,12 +1330,12 @@ if (showProfile) {
                 transition: 'all 0.2s ease'
               }}
               onMouseEnter={(e) => {
-                e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+                e.currentTarget.style.transform = 'translateY(-4px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
               }}
               onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)'
-                e.target.style.boxShadow = 'none'
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
               }}
             >
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>👤</span>
@@ -1077,7 +1348,7 @@ if (showProfile) {
               style={{
                 background: darkMode ? '#1a1a2e' : 'white',
                 color: darkMode ? '#e4e4e7' : '#1a1a2e',
-                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                border: `2px solid ${darkMode ? '#2d2d44' : '#1a1a2e'}`,
                 padding: '1.5rem',
                 borderRadius: '16px',
                 textAlign: 'left',
@@ -1086,12 +1357,12 @@ if (showProfile) {
                 transition: 'all 0.2s ease'
               }}
               onMouseEnter={(e) => {
-                e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+                e.currentTarget.style.transform = 'translateY(-4px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
               }}
               onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)'
-                e.target.style.boxShadow = 'none'
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
               }}
             >
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>🗺️</span>
@@ -1104,7 +1375,7 @@ if (showProfile) {
               style={{
                 background: darkMode ? '#1a1a2e' : 'white',
                 color: darkMode ? '#e4e4e7' : '#1a1a2e',
-                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                border: `2px solid ${darkMode ? '#2d2d44' : '#1a1a2e'}`,
                 padding: '1.5rem',
                 borderRadius: '16px',
                 textAlign: 'left',
@@ -1113,12 +1384,12 @@ if (showProfile) {
                 transition: 'all 0.2s ease'
               }}
               onMouseEnter={(e) => {
-                e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+                e.currentTarget.style.transform = 'translateY(-4px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
               }}
               onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)'
-                e.target.style.boxShadow = 'none'
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
               }}
             >
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📅</span>
@@ -1126,7 +1397,6 @@ if (showProfile) {
               <p style={{ fontSize: '13px', color: '#6b7280' }}>View your trips</p>
             </button>
 
-            {/* Admin Portal - ONLY visible to admins */}
             {userType === 'admin' && (
               <button
                 onClick={() => setShowAdmin(true)}
@@ -1142,12 +1412,12 @@ if (showProfile) {
                   transition: 'all 0.2s ease'
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.transform = 'translateY(-4px)'
-                  e.target.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.3)'
+                  e.currentTarget.style.transform = 'translateY(-4px)'
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(139, 92, 246, 0.3)'
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0)'
-                  e.target.style.boxShadow = 'none'
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = 'none'
                 }}
               >
                 <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📊</span>
@@ -1161,7 +1431,7 @@ if (showProfile) {
               style={{
                 background: darkMode ? '#1a1a2e' : 'white',
                 color: darkMode ? '#e4e4e7' : '#1a1a2e',
-                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                border: `2px solid ${darkMode ? '#2d2d44' : '#1a1a2e'}`,
                 padding: '1.5rem',
                 borderRadius: '16px',
                 textAlign: 'left',
@@ -1170,12 +1440,12 @@ if (showProfile) {
                 transition: 'all 0.2s ease'
               }}
               onMouseEnter={(e) => {
-                e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+                e.currentTarget.style.transform = 'translateY(-4px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
               }}
               onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)'
-                e.target.style.boxShadow = 'none'
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
               }}
             >
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📋</span>
@@ -1188,7 +1458,7 @@ if (showProfile) {
               style={{
                 background: darkMode ? '#1a1a2e' : 'white',
                 color: darkMode ? '#e4e4e7' : '#1a1a2e',
-                border: '2px solid' + (darkMode ? '#2d2d44' : '#1a1a2e'),
+                border: `2px solid ${darkMode ? '#2d2d44' : '#1a1a2e'}`,
                 padding: '1.5rem',
                 borderRadius: '16px',
                 textAlign: 'left',
@@ -1197,12 +1467,12 @@ if (showProfile) {
                 transition: 'all 0.2s ease'
               }}
               onMouseEnter={(e) => {
-                e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+                e.currentTarget.style.transform = 'translateY(-4px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
               }}
               onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)'
-                e.target.style.boxShadow = 'none'
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
               }}
             >
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>🏝️</span>
@@ -1210,7 +1480,6 @@ if (showProfile) {
               <p style={{ fontSize: '13px', color: '#6b7280' }}>Book your adventure</p>
             </button>
 
-            {/* Your Stats - Clickable */}
             <button
               onClick={() => setShowStats(true)}
               style={{
@@ -1226,12 +1495,12 @@ if (showProfile) {
                 color: darkMode ? '#e4e4e7' : '#1a1a2e'
               }}
               onMouseEnter={(e) => {
-                e.target.style.transform = 'translateY(-4px)'
-                e.target.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+                e.currentTarget.style.transform = 'translateY(-4px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
               }}
               onMouseLeave={(e) => {
-                e.target.style.transform = 'translateY(0)'
-                e.target.style.boxShadow = '0 4px 20px rgba(0,0,0,0.04)'
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.04)'
               }}
             >
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📊</span>
@@ -1241,7 +1510,33 @@ if (showProfile) {
               </p>
             </button>
 
-            {/* AI Assistant Card */}
+            <button
+              onClick={() => setShowMyReviews(true)}
+              style={{
+                background: darkMode ? '#1a1a2e' : 'white',
+                color: darkMode ? '#e4e4e7' : '#1a1a2e',
+                border: `2px solid ${darkMode ? '#2d2d44' : '#1a1a2e'}`,
+                padding: '1.5rem',
+                borderRadius: '16px',
+                textAlign: 'left',
+                width: '100%',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-4px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+            >
+              <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>⭐</span>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>My Reviews</h3>
+              <p style={{ fontSize: '13px', color: '#6b7280' }}>Review your trips</p>
+            </button>
+
             <div style={{
               background: darkMode ? '#1a1a2e' : 'white',
               borderRadius: '16px',
@@ -1285,7 +1580,6 @@ if (showProfile) {
             </span>
           </h2>
 
-          {/* Empty State (No Trips) */}
           {trips.length === 0 ? (
             <div style={{
               background: darkMode ? '#1a1a2e' : 'white',
@@ -1338,12 +1632,12 @@ if (showProfile) {
                     transition: 'all 0.3s ease'
                   }}
                   onMouseEnter={(e) => {
-                    e.target.style.transform = 'scale(1.05)'
-                    e.target.style.boxShadow = '0 8px 24px rgba(232, 141, 92, 0.3)'
+                    e.currentTarget.style.transform = 'scale(1.05)'
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(232, 141, 92, 0.3)'
                   }}
                   onMouseLeave={(e) => {
-                    e.target.style.transform = 'scale(1)'
-                    e.target.style.boxShadow = 'none'
+                    e.currentTarget.style.transform = 'scale(1)'
+                    e.currentTarget.style.boxShadow = 'none'
                   }}
                 >
                   ✨ Create Your First Trip
@@ -1351,7 +1645,6 @@ if (showProfile) {
               </div>
             </div>
           ) : (
-            /* Trip Cards */
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               {trips.map((trip, index) => (
                 <motion.div
@@ -1370,12 +1663,12 @@ if (showProfile) {
                     overflow: 'hidden'
                   }}
                   onMouseEnter={(e) => {
-                    e.target.style.transform = 'translateY(-4px)'
-                    e.target.style.boxShadow = '0 12px 40px rgba(0,0,0,0.08)'
+                    e.currentTarget.style.transform = 'translateY(-4px)'
+                    e.currentTarget.style.boxShadow = '0 12px 40px rgba(0,0,0,0.08)'
                   }}
                   onMouseLeave={(e) => {
-                    e.target.style.transform = 'translateY(0)'
-                    e.target.style.boxShadow = '0 4px 20px rgba(0,0,0,0.04)'
+                    e.currentTarget.style.transform = 'translateY(0)'
+                    e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.04)'
                   }}
                 >
                   <div style={{
@@ -1490,12 +1783,12 @@ if (showProfile) {
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.target.style.background = '#1a1a2e'
-                        e.target.style.color = 'white'
+                        e.currentTarget.style.background = '#1a1a2e'
+                        e.currentTarget.style.color = 'white'
                       }}
                       onMouseLeave={(e) => {
-                        e.target.style.background = 'transparent'
-                        e.target.style.color = darkMode ? '#a1a1aa' : '#1a1a2e'
+                        e.currentTarget.style.background = 'transparent'
+                        e.currentTarget.style.color = darkMode ? '#a1a1aa' : '#1a1a2e'
                       }}
                     >
                       🔗 Share
@@ -1514,12 +1807,12 @@ if (showProfile) {
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.target.style.background = '#2E4A4A'
-                        e.target.style.color = 'white'
+                        e.currentTarget.style.background = '#2E4A4A'
+                        e.currentTarget.style.color = 'white'
                       }}
                       onMouseLeave={(e) => {
-                        e.target.style.background = 'transparent'
-                        e.target.style.color = '#2E4A4A'
+                        e.currentTarget.style.background = 'transparent'
+                        e.currentTarget.style.color = '#2E4A4A'
                       }}
                     >
                       💬 Chat
@@ -1538,12 +1831,12 @@ if (showProfile) {
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.target.style.background = '#F4C542'
-                        e.target.style.color = 'white'
+                        e.currentTarget.style.background = '#F4C542'
+                        e.currentTarget.style.color = 'white'
                       }}
                       onMouseLeave={(e) => {
-                        e.target.style.background = 'transparent'
-                        e.target.style.color = '#F4C542'
+                        e.currentTarget.style.background = 'transparent'
+                        e.currentTarget.style.color = '#F4C542'
                       }}
                     >
                       📸 Photos
@@ -1562,12 +1855,12 @@ if (showProfile) {
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.target.style.background = '#E88D5C'
-                        e.target.style.color = 'white'
+                        e.currentTarget.style.background = '#E88D5C'
+                        e.currentTarget.style.color = 'white'
                       }}
                       onMouseLeave={(e) => {
-                        e.target.style.background = 'transparent'
-                        e.target.style.color = '#E88D5C'
+                        e.currentTarget.style.background = 'transparent'
+                        e.currentTarget.style.color = '#E88D5C'
                       }}
                     >
                       🧳 Packing
@@ -1592,12 +1885,12 @@ if (showProfile) {
                         transition: 'all 0.2s ease'
                       }}
                       onMouseEnter={(e) => {
-                        e.target.style.background = '#E88D5C'
-                        e.target.style.color = 'white'
+                        e.currentTarget.style.background = '#E88D5C'
+                        e.currentTarget.style.color = 'white'
                       }}
                       onMouseLeave={(e) => {
-                        e.target.style.background = 'transparent'
-                        e.target.style.color = '#E88D5C'
+                        e.currentTarget.style.background = 'transparent'
+                        e.currentTarget.style.color = '#E88D5C'
                       }}
                     >
                       📋 View Itinerary
@@ -1607,6 +1900,230 @@ if (showProfile) {
               ))}
             </div>
           )}
+
+          {/* ============================================================
+            PUBLIC REVIEWS SECTION - Shows reviews from ALL users
+            ============================================================ */}
+          <div style={{ marginTop: '3rem' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1rem',
+              flexWrap: 'wrap',
+              gap: '0.5rem'
+            }}>
+              <h2 style={{
+                fontSize: '22px',
+                fontWeight: '700',
+                color: darkMode ? '#e4e4e7' : '#1a1a2e',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                flexWrap: 'wrap'
+              }}>
+                🌍 Community Reviews
+                <span style={{
+                  fontSize: '14px',
+                  fontWeight: '400',
+                  color: '#6b7280',
+                  background: darkMode ? '#0f0f1a' : '#f5f3ff',
+                  padding: '2px 10px',
+                  borderRadius: '12px'
+                }}>
+                  {allReviews.length}
+                </span>
+              </h2>
+              <button
+                onClick={() => setShowMyReviews(true)}
+                style={{
+                  padding: '0.5rem 1.5rem',
+                  background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)'
+                }}
+              >
+                ✏️ Write a Review
+              </button>
+            </div>
+
+            {allReviews.length === 0 ? (
+              <div style={{
+                background: darkMode ? '#1a1a2e' : 'white',
+                borderRadius: '16px',
+                padding: '3rem 2rem',
+                textAlign: 'center',
+                border: '2px dashed rgba(26, 43, 60, 0.1)'
+              }}>
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <span style={{ fontSize: '48px', display: 'block', marginBottom: '1rem' }}>💬</span>
+                  <h3 style={{ fontSize: '20px', fontWeight: '700', color: darkMode ? '#e4e4e7' : '#1a1a2e', marginBottom: '0.5rem' }}>
+                    No community reviews yet
+                  </h3>
+                  <p style={{ color: '#6b7280', maxWidth: '400px', margin: '0 auto', lineHeight: '1.6' }}>
+                    Be the first to share your travel experience with the community!
+                  </p>
+                  <button
+                    onClick={() => setShowMyReviews(true)}
+                    style={{
+                      marginTop: '1.5rem',
+                      padding: '0.75rem 2rem',
+                      background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '15px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'scale(1.05)'
+                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(232, 141, 92, 0.3)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'scale(1)'
+                      e.currentTarget.style.boxShadow = 'none'
+                    }}
+                  >
+                    Write Your First Review
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                gap: '1.5rem'
+              }}>
+                {allReviews.map((review) => {
+                  // Determine the reviewer name
+                  let reviewerName = 'Anonymous'
+                  if (review.profiles) {
+                    if (typeof review.profiles === 'object') {
+                      reviewerName = review.profiles.full_name || review.profiles.email || 'Anonymous'
+                    } else if (typeof review.profiles === 'string') {
+                      reviewerName = review.profiles
+                    }
+                  }
+
+                  // Check if this is the current user's review
+                  const isOwnReview = review.user_id === user?.id
+                  
+                  return (
+                    <div
+                      key={review.id}
+                      style={{
+                        background: darkMode ? '#1a1a2e' : 'white',
+                        borderRadius: '16px',
+                        padding: '1.5rem',
+                        border: isOwnReview 
+                          ? `2px solid ${darkMode ? '#8B5CF6' : '#8B5CF6'}` 
+                          : `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(26,43,60,0.06)'}`,
+                        boxShadow: isOwnReview 
+                          ? '0 4px 16px rgba(139, 92, 246, 0.15)' 
+                          : '0 4px 16px rgba(0,0,0,0.04)',
+                        transition: 'all 0.2s ease',
+                        position: 'relative'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)'
+                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)'
+                        e.currentTarget.style.boxShadow = isOwnReview 
+                          ? '0 4px 16px rgba(139, 92, 246, 0.15)' 
+                          : '0 4px 16px rgba(0,0,0,0.04)'
+                      }}
+                    >
+                      {isOwnReview && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '8px',
+                          right: '8px',
+                          background: '#8B5CF6',
+                          color: 'white',
+                          fontSize: '10px',
+                          padding: '2px 10px',
+                          borderRadius: '12px',
+                          fontWeight: '600'
+                        }}>
+                          Your Review
+                        </div>
+                      )}
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <span style={{ 
+                              fontWeight: '600', 
+                              color: darkMode ? '#e4e4e7' : '#1a1a2e',
+                              fontSize: '15px'
+                            }}>
+                              {reviewerName}
+                            </span>
+                            <span style={{ 
+                              fontSize: '11px', 
+                              color: '#6b7280',
+                              background: darkMode ? '#0f0f1a' : '#f5f3ff',
+                              padding: '0.15rem 0.6rem',
+                              borderRadius: '12px'
+                            }}>
+                              {new Date(review.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div style={{ marginTop: '0.25rem' }}>
+                            {Array.from({ length: 5 }, (_, i) => (
+                              <span key={i} style={{ fontSize: '18px' }}>
+                                {i < (review.rating || 0) ? '⭐' : '☆'}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        {review.trips && review.trips.destination && (
+                          <span style={{
+                            fontSize: '10px',
+                            background: darkMode ? '#0f0f1a' : '#f5f3ff',
+                            padding: '0.2rem 0.6rem',
+                            borderRadius: '12px',
+                            color: '#6b7280',
+                            whiteSpace: 'nowrap',
+                            maxWidth: '120px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}>
+                            📍 {review.trips.destination}
+                          </span>
+                        )}
+                      </div>
+                      {review.comment && (
+                        <p style={{ 
+                          color: darkMode ? '#d1d5db' : '#4b5563', 
+                          marginTop: '0.75rem',
+                          lineHeight: '1.6',
+                          fontSize: '14px'
+                        }}>
+                          {review.comment}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
