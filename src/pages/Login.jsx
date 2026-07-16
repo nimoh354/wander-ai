@@ -15,14 +15,12 @@ function Login() {
   const { darkMode } = useTheme()
 
   const addDebug = (label, data) => {
-    console.log(`🔍 ${label}:`, data)
     setDebug(prev => [...prev, { time: new Date().toLocaleTimeString(), label, data: JSON.stringify(data, null, 2) }])
   }
 
   useEffect(() => {
     const checkSupabase = async () => {
       try {
-        addDebug('Checking Supabase connection', { url: import.meta.env.VITE_SUPABASE_URL })
         const { data, error } = await supabase.auth.getSession()
         if (error) {
           addDebug('⚠️ Supabase connection error', error)
@@ -42,12 +40,8 @@ function Login() {
     setMessage('')
     setMessageType('')
 
-    addDebug('Form submitted', { isSignUp, email })
-
     try {
       if (isSignUp) {
-        addDebug('Attempting signup', { email })
-
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password: password,
@@ -59,37 +53,26 @@ function Login() {
           }
         })
 
-        addDebug('Signup response', { data, error })
-
         if (error) {
-          addDebug('Signup error', error)
           throw error
         }
 
         if (data.user) {
-          addDebug('User created', { id: data.user.id, email: data.user.email })
-          
-          // ✅ Send verification email via EmailJS
           try {
             const result = await sendVerificationEmail(
               email,
               email.split('@')[0] || 'Traveler',
               `${window.location.origin}/login?email=${encodeURIComponent(email)}`
             )
-            if (result.success) {
-              addDebug('Verification email sent')
-            } else {
-              addDebug('Email error:', result.error)
+            if (!result.success) {
+              console.warn('Email error:', result.error)
             }
           } catch (emailErr) {
-            addDebug('Email error:', emailErr.message)
+            console.warn('Email error:', emailErr.message)
           }
 
           setMessage('Account created! Please check your email to verify your account.')
           setMessageType('success')
-
-          // ✅ Profile is created automatically by database trigger
-          // No manual upsert needed!
 
           setTimeout(() => {
             setIsSignUp(false)
@@ -97,43 +80,30 @@ function Login() {
           }, 4000)
         }
       } else {
-        addDebug('Attempting login', { email })
-
         const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password: password,
         })
 
-        addDebug('Login response', { data, error })
-
         if (error) {
-          addDebug('Login error', error)
-          
           if (error.message.includes('Email not confirmed')) {
             setMessage('Email not verified. Please check your inbox for the verification link.')
             setMessageType('error')
             setLoading(false)
             return
           }
-          
           throw error
         }
 
         if (data.user) {
-          addDebug('User logged in', { id: data.user.id })
           setMessage('Login successful! Redirecting...')
           setMessageType('success')
-
-          // ✅ Profile already exists from trigger, no need to check/create
-
           setTimeout(() => {
             window.location.href = '/dashboard'
           }, 1500)
         }
       }
     } catch (error) {
-      addDebug('Caught error', { message: error.message })
-
       if (error.message?.includes('rate limit')) {
         setMessage('Too many attempts. Please wait 5-10 minutes.')
       } else if (error.message?.includes('already registered')) {
@@ -148,7 +118,6 @@ function Login() {
       setMessageType('error')
     } finally {
       setLoading(false)
-      addDebug('Process complete', { loading: false })
     }
   }
 
