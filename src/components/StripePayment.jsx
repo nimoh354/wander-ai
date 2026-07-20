@@ -43,9 +43,9 @@ function CheckoutForm({ bookingId, amount, onSuccess, onError }) {
         console.log('💰 Amount:', amount);
         
         // Dynamic API URL (local vs production)
-        const apiUrl = import.meta.env.PROD 
-          ? '/api/create-payment-intent'
-          : 'http://localhost:3000/api/create-payment-intent';
+      const apiUrl = import.meta.env.PROD 
+  ? '/api/create-payment-intent'
+  : 'http://localhost:3000/api/create-payment-intent';
 
         console.log(`📡 Calling API: ${apiUrl}`);
 

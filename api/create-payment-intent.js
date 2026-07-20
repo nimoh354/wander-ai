@@ -1,24 +1,25 @@
-import express from 'express';
+// api/create-payment-intent.js
 import Stripe from 'stripe';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const app = express();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Middleware
-app.use(cors({
-  origin: process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}` 
-    : 'http://localhost:5173',
-  credentials: true
-}));
-app.use(express.json());
+// ✅ Create payment intent
+export default async function handler(req, res) {
+  // Enable CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-// Payment intent endpoint
-app.post('/api/create-payment-intent', async (req, res) => {
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -39,22 +40,15 @@ app.post('/api/create-payment-intent', async (req, res) => {
       description: `Booking ${bookingId}`
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id
     });
 
   } catch (error) {
     console.error('❌ Payment error:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: error.message || 'Failed to create payment intent' 
     });
   }
-});
-
-// Health check endpoint (optional)
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-export default app;
+}
