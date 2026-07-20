@@ -12,10 +12,12 @@ function Booking({ user, packageId, onBookingSuccess }) {
   const [availableDates, setAvailableDates] = useState([])
   const [bookingConfirmed, setBookingConfirmed] = useState(false)
   const [bookingData, setBookingData] = useState(null)
+  const [existingBookings, setExistingBookings] = useState([])
 
   useEffect(() => {
     if (packageId) {
       fetchAvailableDates()
+      fetchExistingBookings()
     }
   }, [packageId])
 
@@ -32,17 +34,85 @@ function Booking({ user, packageId, onBookingSuccess }) {
         return
       }
       
-      // Format dates for comparison
       const formattedDates = data?.map(item => ({
         ...item,
         date: new Date(item.date).toISOString().split('T')[0]
       })) || []
       
       setAvailableDates(formattedDates)
-      console.log('📅 Available dates:', formattedDates)
     } catch (err) {
       console.error('❌ Fetch error:', err)
     }
+  }
+
+  // ✅ Fetch existing bookings to check for conflicts
+  const fetchExistingBookings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tour_bookings')
+        .select('booking_date, guests, status, user_id')
+        .eq('package_id', packageId)
+        .in('status', ['pending', 'confirmed']) // Check pending AND confirmed bookings
+
+      if (error) {
+        console.error('❌ Error fetching bookings:', error)
+        return
+      }
+
+      setExistingBookings(data || [])
+    } catch (err) {
+      console.error('❌ Fetch error:', err)
+    }
+  }
+
+  // ✅ Check if date is fully booked
+  const isDateFullyBooked = (date) => {
+    // Check availability slots
+    const availability = availableDates.find(a => a.date === date)
+    if (!availability) return true // No availability for this date
+    
+    // Check if slots are full
+    if (availability.slots <= availability.booked) return true
+
+    // Check existing bookings for this date
+    const bookingsOnDate = existingBookings.filter(b => b.booking_date === date)
+    const totalBooked = bookingsOnDate.reduce((sum, b) => sum + b.guests, 0)
+    
+    // Check if adding new guests would exceed capacity
+    const availableSlots = availability.slots - availability.booked - totalBooked
+    if (availableSlots <= 0) return true
+
+    return false
+  }
+
+  // ✅ Get remaining slots for a date
+  const getRemainingSlots = (date) => {
+    const availability = availableDates.find(a => a.date === date)
+    if (!availability) return 0
+
+    const bookingsOnDate = existingBookings.filter(b => b.booking_date === date)
+    const totalBooked = bookingsOnDate.reduce((sum, b) => sum + b.guests, 0)
+    
+    return availability.slots - availability.booked - totalBooked
+  }
+
+  // ✅ Check if user already has booking for this date
+  const userHasBookingOnDate = async (userId, date) => {
+    const { data, error } = await supabase
+      .from('tour_bookings')
+      .select('id, status')
+      .eq('user_id', userId)
+      .eq('package_id', packageId)
+      .eq('booking_date', date)
+      .in('status', ['pending', 'confirmed'])
+      .maybeSingle()
+
+    if (error) {
+      console.error('❌ Error checking user booking:', error)
+      return false
+    }
+
+    return !!data
   }
 
   const handleSubmit = async (e) => {
@@ -51,43 +121,39 @@ function Booking({ user, packageId, onBookingSuccess }) {
     setMessage('')
 
     try {
+      // Get current user
       const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser()
       
-      if (userError) {
+      if (userError || !currentUser) {
         setMessage('❌ Please log in to book')
         setLoading(false)
         return
       }
 
-      const userId = currentUser?.id || user?.id
+      const userId = currentUser.id
 
-      console.log('👤 Current user ID:', userId)
+      console.log('👤 User ID:', userId)
       console.log('📦 Package ID:', packageId)
       console.log('📅 Selected date:', booking.booking_date)
       console.log('👥 Guests:', booking.guests)
 
-      if (!userId) {
-        setMessage('❌ Please log in to book')
-        setLoading(false)
-        return
-      }
-
+      // ✅ Validate inputs
       if (!packageId) {
         setMessage('❌ Package not found')
         setLoading(false)
         return
       }
 
-      // ✅ Check if the selected date is valid
+      if (!booking.booking_date) {
+        setMessage('❌ Please select a booking date')
+        setLoading(false)
+        return
+      }
+
+      // ✅ Check if date is valid
       const availabilityCheck = availableDates.find(
         a => a.date === booking.booking_date
       )
-
-      console.log('🔍 Date check:', { 
-        selectedDate: booking.booking_date, 
-        availableDates: availableDates.map(a => a.date),
-        match: availabilityCheck 
-      })
 
       if (!availabilityCheck) {
         setMessage('❌ Please select a date from the available options')
@@ -95,8 +161,26 @@ function Booking({ user, packageId, onBookingSuccess }) {
         return
       }
 
-      if (availabilityCheck.slots <= availabilityCheck.booked) {
-        setMessage('❌ No slots available for this date')
+      // ✅ Check if date is fully booked
+      const remainingSlots = getRemainingSlots(booking.booking_date)
+      
+      if (remainingSlots <= 0) {
+        setMessage('❌ This date is fully booked. Please select another date.')
+        setLoading(false)
+        return
+      }
+
+      if (booking.guests > remainingSlots) {
+        setMessage(`❌ Only ${remainingSlots} slot(s) available for this date. Please reduce number of guests.`)
+        setLoading(false)
+        return
+      }
+
+      // ✅ Check if user already has a booking for this date
+      const hasExistingBooking = await userHasBookingOnDate(userId, booking.booking_date)
+      
+      if (hasExistingBooking) {
+        setMessage('❌ You already have a booking for this date. Please select another date.')
         setLoading(false)
         return
       }
@@ -115,16 +199,23 @@ function Booking({ user, packageId, onBookingSuccess }) {
         })
         .select()
 
+      // ✅ Handle database errors
       if (error) {
         console.error('❌ Supabase insert error:', error)
-        setMessage('❌ Error creating booking: ' + error.message)
+        
+        // Check for duplicate booking error (unique constraint)
+        if (error.code === '23505') {
+          setMessage('❌ You already have a booking for this date. Please select another date.')
+        } else {
+          setMessage('❌ Error creating booking: ' + error.message)
+        }
         setLoading(false)
         return
       }
 
       console.log('✅ Booking created:', data)
 
-      // Update availability
+      // ✅ Update availability
       const { error: updateError } = await supabase
         .from('availability')
         .update({ booked: availabilityCheck.booked + booking.guests })
@@ -133,15 +224,20 @@ function Booking({ user, packageId, onBookingSuccess }) {
 
       if (updateError) {
         console.error('❌ Update availability error:', updateError)
+        // Don't fail the booking if availability update fails
       }
 
       setBookingData(data?.[0])
       setBookingConfirmed(true)
       setMessage('✅ Booking confirmed!')
 
+      // ✅ Trigger events
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('bookingCreated'))
-        localStorage.setItem('lastBookingCreated', JSON.stringify({ id: data?.[0]?.id, timestamp: Date.now() }))
+        localStorage.setItem('lastBookingCreated', JSON.stringify({ 
+          id: data?.[0]?.id, 
+          timestamp: Date.now() 
+        }))
       }
 
       if (onBookingSuccess) {
@@ -154,6 +250,18 @@ function Booking({ user, packageId, onBookingSuccess }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  // ✅ Reset booking state
+  const resetBooking = () => {
+    setBooking({
+      booking_date: '',
+      guests: 1,
+      special_requests: ''
+    })
+    setBookingConfirmed(false)
+    setBookingData(null)
+    setMessage('')
   }
 
   if (bookingConfirmed) {
@@ -173,27 +281,57 @@ function Booking({ user, packageId, onBookingSuccess }) {
           Your booking has been confirmed successfully.
         </p>
         <p style={{ fontSize: '14px', color: '#6b7280' }}>
-          📅 {new Date(bookingData?.booking_date).toLocaleDateString()} • 👥 {bookingData?.guests} guests
+          📅 {bookingData?.booking_date ? new Date(bookingData.booking_date).toLocaleDateString() : 'Date TBD'} 
+          • 👥 {bookingData?.guests || 1} guests
         </p>
-        <button
-          onClick={() => window.location.href = '/dashboard'}
-          style={{
-            marginTop: '1rem',
-            padding: '0.6rem 1.5rem',
-            background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: '600',
-            fontSize: '14px'
-          }}
-        >
-          ← Back to Dashboard
-        </button>
+        <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => window.location.href = '/dashboard'}
+            style={{
+              padding: '0.6rem 1.5rem',
+              background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '14px'
+            }}
+          >
+            ← My Dashboard
+          </button>
+          <button
+            onClick={resetBooking}
+            style={{
+              padding: '0.6rem 1.5rem',
+              background: 'transparent',
+              color: '#6b7280',
+              border: '2px solid #e5e7eb',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '14px'
+            }}
+          >
+            Book Another Tour
+          </button>
+        </div>
       </div>
     )
   }
+
+  // ✅ Get available dates with remaining slots for display
+  const availableDatesWithSlots = availableDates
+    .filter(date => !isDateFullyBooked(date.date))
+    .map(date => ({
+      ...date,
+      remainingSlots: getRemainingSlots(date.date)
+    }))
+
+  // ✅ Get full dates (fully booked)
+  const fullyBookedDates = availableDates
+    .filter(date => isDateFullyBooked(date.date))
+    .map(date => date.date)
 
   return (
     <div>
@@ -224,11 +362,61 @@ function Booking({ user, packageId, onBookingSuccess }) {
               cursor: 'pointer'
             }}
           />
-          {availableDates.length > 0 ? (
-            <div style={{ marginTop: '0.25rem', fontSize: '11px', color: '#6b7280' }}>
-              📅 Available dates: {availableDates.map(d => new Date(d.date).toLocaleDateString()).join(', ')}
+          
+          {/* Show available dates */}
+          {availableDatesWithSlots.length > 0 && (
+            <div style={{ marginTop: '0.5rem' }}>
+              <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '0.25rem' }}>
+                ✅ Available dates:
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {availableDatesWithSlots.map(d => (
+                  <span 
+                    key={d.date}
+                    style={{
+                      fontSize: '10px',
+                      background: '#dcfce7',
+                      color: '#166534',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {new Date(d.date).toLocaleDateString()} 
+                    <span style={{ fontWeight: 'bold' }}> ({d.remainingSlots})</span>
+                  </span>
+                ))}
+              </div>
             </div>
-          ) : (
+          )}
+
+          {/* Show fully booked dates */}
+          {fullyBookedDates.length > 0 && (
+            <div style={{ marginTop: '0.25rem' }}>
+              <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '0.25rem' }}>
+                🔴 Fully booked:
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {fullyBookedDates.map(date => (
+                  <span 
+                    key={date}
+                    style={{
+                      fontSize: '10px',
+                      background: '#fee2e2',
+                      color: '#991b1b',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {new Date(date).toLocaleDateString()}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {availableDates.length === 0 && (
             <div style={{ marginTop: '0.25rem', fontSize: '11px', color: '#ef4444' }}>
               ⚠️ No dates available for this package
             </div>
@@ -273,7 +461,7 @@ function Booking({ user, packageId, onBookingSuccess }) {
               fontFamily: 'inherit',
               resize: 'vertical'
             }}
-            placeholder="Any special requests?"
+            placeholder="Any special requests? (dietary needs, accessibility, etc.)"
           />
         </div>
 
@@ -293,22 +481,24 @@ function Booking({ user, packageId, onBookingSuccess }) {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || availableDates.length === 0}
           style={{
             width: '100%',
             padding: '0.6rem',
-            background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
+            background: availableDates.length === 0 
+              ? '#d1d5db' 
+              : 'linear-gradient(135deg, #E88D5C, #D97A4A)',
             color: 'white',
             border: 'none',
             borderRadius: '8px',
-            cursor: 'pointer',
+            cursor: availableDates.length === 0 ? 'not-allowed' : 'pointer',
             fontWeight: '600',
             fontSize: '14px',
             opacity: loading ? 0.7 : 1,
             transition: 'all 0.2s ease'
           }}
           onMouseEnter={(e) => {
-            if (!loading) {
+            if (!loading && availableDates.length > 0) {
               e.target.style.transform = 'scale(1.01)'
               e.target.style.boxShadow = '0 4px 12px rgba(232, 141, 92, 0.3)'
             }
@@ -318,7 +508,7 @@ function Booking({ user, packageId, onBookingSuccess }) {
             e.target.style.boxShadow = 'none'
           }}
         >
-          {loading ? 'Booking...' : '📅 Book Now'}
+          {loading ? 'Booking...' : availableDates.length === 0 ? 'No Dates Available' : '📅 Book Now'}
         </button>
       </form>
     </div>
