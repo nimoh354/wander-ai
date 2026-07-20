@@ -1,3 +1,4 @@
+// src/components/Booking.jsx
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
@@ -12,10 +13,9 @@ function Booking({ user, packageId, onBookingSuccess }) {
   const [availableDates, setAvailableDates] = useState([])
   const [bookingConfirmed, setBookingConfirmed] = useState(false)
   const [bookingData, setBookingData] = useState(null)
-  const [packageDetails, setPackageDetails] = useState(null)
-  const [packageExceeded, setPackageExceeded] = useState(false)
-  const [remainingSlots, setRemainingSlots] = useState(0)
-  const [maxCapacity, setMaxCapacity] = useState(10)
+  const [maxGuests, setMaxGuests] = useState(10)
+  const [packageName, setPackageName] = useState('')
+  const [totalRemainingSlots, setTotalRemainingSlots] = useState(0)
 
   useEffect(() => {
     if (packageId) {
@@ -24,54 +24,113 @@ function Booking({ user, packageId, onBookingSuccess }) {
     }
   }, [packageId])
 
-  // ✅ Fetch package details with variable capacity
+  // ✅ Fetch package details
   const fetchPackageDetails = async () => {
     try {
-      const { data: packageData, error: packageError } = await supabase
+      const { data, error } = await supabase
         .from('tour_packages')
-        .select('id, name, max_capacity, current_bookings, is_full')
+        .select('id, name, max_guests')
         .eq('id', packageId)
         .single()
 
-      if (packageError) throw packageError
+      if (error) throw error
 
-      setPackageDetails(packageData)
-      setMaxCapacity(packageData.max_capacity || 10)
-      setPackageExceeded(packageData.is_full || false)
-      setRemainingSlots((packageData.max_capacity || 10) - (packageData.current_bookings || 0))
-
+      setPackageName(data.name)
+      setMaxGuests(data.max_guests || 10)
     } catch (error) {
       console.error('❌ Error fetching package:', error)
     }
   }
 
-  // ✅ Fetch available dates
+  // ✅ Fetch available dates and calculate remaining slots
   const fetchAvailableDates = async () => {
     try {
+      const today = new Date().toISOString().split('T')[0]
+      
+      console.log('📅 Fetching dates for package:', packageId)
+
       const { data, error } = await supabase
         .from('availability')
         .select('date, slots, booked')
         .eq('package_id', packageId)
         .eq('status', 'available')
+        .gte('date', today)
+        .order('date', { ascending: true })
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ Error fetching dates:', error)
+        return
+      }
 
-      const formattedDates = data?.map(item => ({
-        ...item,
-        date: new Date(item.date).toISOString().split('T')[0]
-      })) || []
+      // ✅ Calculate remaining slots for each date
+      const formattedDates = data?.map(item => {
+        const remaining = (item.slots || 0) - (item.booked || 0)
+        return {
+          ...item,
+          date: new Date(item.date).toISOString().split('T')[0],
+          remainingSlots: remaining > 0 ? remaining : 0,
+          isFullyBooked: remaining <= 0
+        }
+      }) || []
+      
+      console.log('📅 Formatted dates:', formattedDates)
       
       setAvailableDates(formattedDates)
+
+      // ✅ Calculate total remaining slots, CAPPED at max_guests
+      const total = formattedDates.reduce((sum, d) => sum + d.remainingSlots, 0)
+      const cappedTotal = Math.min(total, maxGuests)  // ✅ Cap at package capacity
+      
+      console.log('📊 Total slots:', total)
+      console.log('📊 Capped at max_guests:', cappedTotal)
+      
+      setTotalRemainingSlots(cappedTotal)
+
     } catch (error) {
       console.error('❌ Error fetching dates:', error)
     }
   }
 
-  // ✅ Check if date has available slots
+  // ✅ Get available dates with slots
+  const getAvailableDatesWithSlots = () => {
+    const today = new Date().toISOString().split('T')[0]
+    return availableDates
+      .filter(item => item.date >= today)
+      .filter(item => item.remainingSlots > 0)
+  }
+
+  // ✅ Get fully booked dates
+  const getFullyBookedDates = () => {
+    const today = new Date().toISOString().split('T')[0]
+    return availableDates
+      .filter(item => item.date >= today)
+      .filter(item => item.remainingSlots <= 0)
+      .map(item => item.date)
+  }
+
+  // ✅ Get remaining slots for a specific date
   const getDateRemainingSlots = (date) => {
     const availability = availableDates.find(a => a.date === date)
     if (!availability) return 0
-    return availability.slots - availability.booked
+    return availability.remainingSlots > 0 ? availability.remainingSlots : 0
+  }
+
+  // ✅ Check if user already has booking for this date
+  const userHasBookingOnDate = async (userId, date) => {
+    const { data, error } = await supabase
+      .from('tour_bookings')
+      .select('id, status')
+      .eq('user_id', userId)
+      .eq('package_id', packageId)
+      .eq('booking_date', date)
+      .in('status', ['pending', 'confirmed'])
+      .maybeSingle()
+
+    if (error) {
+      console.error('❌ Error checking user booking:', error)
+      return false
+    }
+    return !!data
   }
 
   const handleSubmit = async (e) => {
@@ -90,13 +149,6 @@ function Booking({ user, packageId, onBookingSuccess }) {
 
       const userId = currentUser.id
 
-      // ✅ Check if package is full
-      if (packageExceeded) {
-        setMessage(`❌ This package is fully booked! (${maxCapacity}/${maxCapacity} guests). Please check out our other amazing packages.`)
-        setLoading(false)
-        return
-      }
-
       // ✅ Validate date
       if (!booking.booking_date) {
         setMessage('❌ Please select a booking date')
@@ -104,8 +156,27 @@ function Booking({ user, packageId, onBookingSuccess }) {
         return
       }
 
+      // ✅ Check if date is in the past
+      const today = new Date().toISOString().split('T')[0]
+      if (booking.booking_date < today) {
+        setMessage('❌ Cannot book past dates. Please select a future date.')
+        setLoading(false)
+        return
+      }
+
+      // ✅ Check if date exists in available dates
+      const dateData = availableDates.find(a => a.date === booking.booking_date)
+      if (!dateData) {
+        setMessage('❌ This date is not available for booking.')
+        setLoading(false)
+        return
+      }
+
       // ✅ Check date availability
-      const dateSlots = getDateRemainingSlots(booking.booking_date)
+      const dateSlots = dateData.remainingSlots
+      
+      console.log('🔍 Date:', booking.booking_date)
+      console.log('🔍 Available slots for this date:', dateSlots)
       
       if (dateSlots <= 0) {
         setMessage('❌ This date is fully booked. Please select another date.')
@@ -114,30 +185,15 @@ function Booking({ user, packageId, onBookingSuccess }) {
       }
 
       if (booking.guests > dateSlots) {
-        setMessage(`❌ Only ${dateSlots} slot(s) available for this date. Please reduce number of guests.`)
-        setLoading(false)
-        return
-      }
-
-      // ✅ Check total package capacity
-      if (booking.guests > remainingSlots) {
-        setMessage(`❌ Only ${remainingSlots} slot(s) remaining for this package. Please reduce number of guests.`)
+        setMessage(`❌ Only ${dateSlots} slot(s) available for this date.`)
         setLoading(false)
         return
       }
 
       // ✅ Check if user already booked this date
-      const { data: existingBooking, error: checkError } = await supabase
-        .from('tour_bookings')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('package_id', packageId)
-        .eq('booking_date', booking.booking_date)
-        .in('status', ['pending', 'confirmed'])
-        .maybeSingle()
-
-      if (existingBooking) {
-        setMessage('❌ You already have a booking for this date. Please select another date.')
+      const hasExistingBooking = await userHasBookingOnDate(userId, booking.booking_date)
+      if (hasExistingBooking) {
+        setMessage('❌ You already have a booking for this date.')
         setLoading(false)
         return
       }
@@ -168,15 +224,31 @@ function Booking({ user, packageId, onBookingSuccess }) {
 
       console.log('✅ Booking created:', data)
 
-      // ✅ Update availability
+      // ✅ Update availability table - increment booked count
+      const newBookedCount = dateData.booked + booking.guests
       const { error: updateError } = await supabase
         .from('availability')
-        .update({ booked: dateSlots + booking.guests })
+        .update({ 
+          booked: newBookedCount,
+          is_fully_booked: newBookedCount >= dateData.slots
+        })
         .eq('package_id', packageId)
         .eq('date', booking.booking_date)
 
       if (updateError) {
         console.error('❌ Update availability error:', updateError)
+      }
+
+      // ✅ Update tour_packages current_bookings
+      const { error: updatePackageError } = await supabase
+        .from('tour_packages')
+        .update({ 
+          current_bookings: supabase.raw('current_bookings + ?', [booking.guests])
+        })
+        .eq('id', packageId)
+
+      if (updatePackageError) {
+        console.error('❌ Update package error:', updatePackageError)
       }
 
       setBookingData(data?.[0])
@@ -262,14 +334,16 @@ function Booking({ user, packageId, onBookingSuccess }) {
     )
   }
 
+  const availableDatesWithSlots = getAvailableDatesWithSlots()
+  const fullyBookedDates = getFullyBookedDates()
+
   return (
     <div>
       <h4 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.75rem' }}>
         📅 Book This Package
       </h4>
 
-      {/* ✅ PACKAGE EXCEEDED BANNER */}
-      {packageExceeded ? (
+      {totalRemainingSlots <= 0 && availableDates.length > 0 ? (
         <div style={{
           background: '#fee2e2',
           border: '2px solid #ef4444',
@@ -283,10 +357,7 @@ function Booking({ user, packageId, onBookingSuccess }) {
             Package Fully Booked!
           </h3>
           <p style={{ color: '#991b1b', fontSize: '14px', marginBottom: '0.5rem' }}>
-            This package has reached its maximum capacity of <strong>{maxCapacity}</strong> guests.
-          </p>
-          <p style={{ color: '#991b1b', fontSize: '13px', marginBottom: '1rem' }}>
-            But don't worry! We have other amazing packages waiting for you.
+            All dates for this package are fully booked.
           </p>
           <button
             onClick={() => window.location.href = '/tours'}
@@ -304,13 +375,45 @@ function Booking({ user, packageId, onBookingSuccess }) {
             🌍 Explore Other Packages
           </button>
         </div>
+      ) : availableDates.length === 0 ? (
+        <div style={{
+          background: '#fef3c7',
+          border: '2px solid #f59e0b',
+          borderRadius: '12px',
+          padding: '1.5rem',
+          marginBottom: '1rem',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '0.5rem' }}>📅</div>
+          <h3 style={{ color: '#92400e', fontWeight: '700', marginBottom: '0.5rem', fontSize: '18px' }}>
+            No Dates Available
+          </h3>
+          <p style={{ color: '#92400e', fontSize: '14px', marginBottom: '0.5rem' }}>
+            This package has no available dates for booking.
+          </p>
+          <button
+            onClick={() => window.location.href = '/tours'}
+            style={{
+              background: '#f59e0b',
+              color: 'white',
+              border: 'none',
+              padding: '0.6rem 2rem',
+              borderRadius: '8px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            🌍 Explore Other Packages
+          </button>
+        </div>
       ) : (
         <>
-          {/* ✅ CAPACITY INDICATOR */}
+          {/* ✅ Capacity Indicator - Shows CAPPED slots */}
           <div style={{ marginBottom: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#6b7280', marginBottom: '0.25rem' }}>
-              <span>Package Capacity</span>
-              <span>{remainingSlots} of {maxCapacity} slots remaining</span>
+              <span>Available Slots</span>
+              <span>{totalRemainingSlots} of {maxGuests} slots remaining</span>
             </div>
             <div style={{
               width: '100%',
@@ -320,18 +423,13 @@ function Booking({ user, packageId, onBookingSuccess }) {
               overflow: 'hidden'
             }}>
               <div style={{
-                width: `${((maxCapacity - remainingSlots) / maxCapacity) * 100}%`,
+                width: `${Math.min((totalRemainingSlots / maxGuests) * 100, 100)}%`,
                 height: '100%',
-                background: remainingSlots <= 2 ? '#ef4444' : remainingSlots <= 4 ? '#f59e0b' : '#22c55e',
+                background: totalRemainingSlots <= 2 ? '#ef4444' : totalRemainingSlots <= 4 ? '#f59e0b' : '#22c55e',
                 borderRadius: '4px',
                 transition: 'width 0.5s ease'
               }} />
             </div>
-            {remainingSlots <= 2 && remainingSlots > 0 && (
-              <p style={{ fontSize: '12px', color: '#ef4444', marginTop: '0.25rem' }}>
-                ⚠️ Only {remainingSlots} slots left! Book now before it's full.
-              </p>
-            )}
           </div>
 
           <form onSubmit={handleSubmit}>
@@ -358,10 +456,17 @@ function Booking({ user, packageId, onBookingSuccess }) {
                   cursor: 'pointer'
                 }}
               />
-              {availableDates.length > 0 && (
+              {availableDatesWithSlots.length > 0 && (
                 <div style={{ marginTop: '0.25rem', fontSize: '12px', color: '#6b7280' }}>
-                  📅 Available: {availableDates.map(d => 
-                    `${new Date(d.date).toLocaleDateString()} (${d.slots - d.booked})`
+                  ✅ Available: {availableDatesWithSlots.map(d => 
+                    `${new Date(d.date).toLocaleDateString()} (${d.remainingSlots} slots)`
+                  ).join(', ')}
+                </div>
+              )}
+              {fullyBookedDates.length > 0 && (
+                <div style={{ marginTop: '0.25rem', fontSize: '12px', color: '#ef4444' }}>
+                  🔴 Fully booked: {fullyBookedDates.map(d => 
+                    new Date(d).toLocaleDateString()
                   ).join(', ')}
                 </div>
               )}
@@ -377,7 +482,7 @@ function Booking({ user, packageId, onBookingSuccess }) {
                 value={booking.guests}
                 onChange={(e) => setBooking({ ...booking, guests: parseInt(e.target.value) || 1 })}
                 min="1"
-                max={remainingSlots}
+                max={totalRemainingSlots > 0 ? totalRemainingSlots : 1}
                 required
                 style={{
                   width: '100%',
@@ -387,11 +492,6 @@ function Booking({ user, packageId, onBookingSuccess }) {
                   fontSize: '14px'
                 }}
               />
-              {booking.guests > remainingSlots && (
-                <p style={{ fontSize: '12px', color: '#ef4444', marginTop: '0.25rem' }}>
-                  ⚠️ Only {remainingSlots} slots available
-                </p>
-              )}
             </div>
 
             {/* Special Requests */}
@@ -432,17 +532,17 @@ function Booking({ user, packageId, onBookingSuccess }) {
 
             <button
               type="submit"
-              disabled={loading || availableDates.length === 0 || remainingSlots === 0}
+              disabled={loading || availableDatesWithSlots.length === 0 || totalRemainingSlots <= 0}
               style={{
                 width: '100%',
                 padding: '0.6rem',
-                background: (loading || availableDates.length === 0 || remainingSlots === 0)
+                background: (loading || availableDatesWithSlots.length === 0 || totalRemainingSlots <= 0)
                   ? '#d1d5db' 
                   : 'linear-gradient(135deg, #E88D5C, #D97A4A)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '8px',
-                cursor: (loading || availableDates.length === 0 || remainingSlots === 0) 
+                cursor: (loading || availableDatesWithSlots.length === 0 || totalRemainingSlots <= 0) 
                   ? 'not-allowed' 
                   : 'pointer',
                 fontWeight: '600',
@@ -452,8 +552,8 @@ function Booking({ user, packageId, onBookingSuccess }) {
               }}
             >
               {loading ? 'Booking...' 
-                : remainingSlots === 0 ? '🚫 Package Full' 
-                : availableDates.length === 0 ? '📅 No Dates' 
+                : totalRemainingSlots <= 0 ? '🚫 Package Full' 
+                : availableDatesWithSlots.length === 0 ? '📅 No Dates Available' 
                 : '📅 Book Now'}
             </button>
           </form>

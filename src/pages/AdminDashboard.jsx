@@ -26,6 +26,29 @@ import {
 } from 'lucide-react'
 import Inventory from '../components/Inventory'
 
+// ✅ Image upload function
+const uploadImage = async (file) => {
+  try {
+    const fileExt = file.name.split('.').pop()
+    const fileName = `tour-packages/${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`
+    
+    const { data, error } = await supabase.storage
+      .from('trip-photos')
+      .upload(fileName, file)
+
+    if (error) throw error
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('trip-photos')
+      .getPublicUrl(fileName)
+
+    return publicUrl
+  } catch (error) {
+    console.error('❌ Upload error:', error)
+    return null
+  }
+}
+
 function AdminDashboard({ user, onLogout }) {
   const { darkMode } = useTheme()
   const [isAdmin, setIsAdmin] = useState(false)
@@ -56,7 +79,7 @@ function AdminDashboard({ user, onLogout }) {
     description: '',
     price: '',
     duration_days: 1,
-    max_guests: 1,
+    max_capacity: 1,
     includes: '',
     excludes: '',
     status: 'active',
@@ -64,7 +87,8 @@ function AdminDashboard({ user, onLogout }) {
     end_date: '',
     available_from: '',
     available_to: '',
-    season: ''
+    season: '',
+    image_url: ''
   })
   
   const [activeTab, setActiveTab] = useState('overview')
@@ -119,146 +143,147 @@ function AdminDashboard({ user, onLogout }) {
     }
   }, [isAdmin])
 
- const fetchDashboardData = async () => {
-  setLoading(true)
-  try {
-    console.log('📊 Fetching dashboard data...')
+  const fetchDashboardData = async () => {
+    setLoading(true)
+    try {
+      console.log('📊 Fetching dashboard data...')
 
-    // Fetch stats
-    const [
-      { count: usersCount },
-      { count: bookingsCount },
-      { count: packagesCount },
-      { count: pendingCount },
-      { count: reviewsCount }
-    ] = await Promise.all([
-      supabase.from('profiles').select('*', { count: 'exact', head: true }),
-      supabase.from('tour_bookings').select('*', { count: 'exact', head: true }),
-      supabase.from('tour_packages').select('*', { count: 'exact', head: true }),
-      supabase.from('tour_bookings').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('trip_reviews').select('*', { count: 'exact', head: true })
-    ])
+      // Fetch stats
+      const [
+        { count: usersCount },
+        { count: bookingsCount },
+        { count: packagesCount },
+        { count: pendingCount },
+        { count: reviewsCount }
+      ] = await Promise.all([
+        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('tour_bookings').select('*', { count: 'exact', head: true }),
+        supabase.from('tour_packages').select('*', { count: 'exact', head: true }),
+        supabase.from('tour_bookings').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('trip_reviews').select('*', { count: 'exact', head: true })
+      ])
 
-    console.log('📊 Stats:', { usersCount, bookingsCount, packagesCount, pendingCount, reviewsCount })
+      console.log('📊 Stats:', { usersCount, bookingsCount, packagesCount, pendingCount, reviewsCount })
 
-    // Fetch bookings (without joins)
-    const { data: bookingsData, error: bookingsError } = await supabase
-      .from('tour_bookings')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(50)
+      // Fetch bookings (without joins)
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from('tour_bookings')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50)
 
-    if (bookingsError) {
-      console.error('❌ Error fetching bookings:', bookingsError)
-    } else {
-      console.log('✅ Bookings fetched:', bookingsData?.length || 0)
-      
-      // Enrich bookings with user and package data (fetch separately)
-      const enrichedBookings = await Promise.all(
-        (bookingsData || []).map(async (booking) => {
-          const [userResult, packageResult] = await Promise.all([
-            supabase.from('profiles').select('full_name, email').eq('id', booking.user_id).single(),
-            supabase.from('tour_packages').select('name, price').eq('id', booking.package_id).single()
-          ])
-          
-          return {
-            ...booking,
-            profiles: userResult.data || { full_name: 'Unknown', email: '' },
-            tour_packages: packageResult.data || { name: 'Unknown', price: 0 }
-          }
-        })
-      )
-      
-      setBookings(enrichedBookings)
-      setRecentBookings(enrichedBookings.slice(0, 10))
+      if (bookingsError) {
+        console.error('❌ Error fetching bookings:', bookingsError)
+      } else {
+        console.log('✅ Bookings fetched:', bookingsData?.length || 0)
+        
+        // Enrich bookings with user and package data (fetch separately)
+        const enrichedBookings = await Promise.all(
+          (bookingsData || []).map(async (booking) => {
+            const [userResult, packageResult] = await Promise.all([
+              supabase.from('profiles').select('full_name, email').eq('id', booking.user_id).single(),
+              supabase.from('tour_packages').select('name, price').eq('id', booking.package_id).single()
+            ])
+            
+            return {
+              ...booking,
+              profiles: userResult.data || { full_name: 'Unknown', email: '' },
+              tour_packages: packageResult.data || { name: 'Unknown', price: 0 }
+            }
+          })
+        )
+        
+        setBookings(enrichedBookings)
+        setRecentBookings(enrichedBookings.slice(0, 10))
+      }
+
+      // Fetch users
+      const { data: usersData, error: usersError } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      if (usersError) {
+        console.error('❌ Error fetching users:', usersError)
+      }
+
+      // Fetch reviews (without joins)
+      const { data: reviewsData, error: reviewsError } = await supabase
+        .from('trip_reviews')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+      if (reviewsError) {
+        console.error('❌ Error fetching reviews:', reviewsError)
+      } else {
+        // Enrich reviews with user data
+        const enrichedReviews = await Promise.all(
+          (reviewsData || []).map(async (review) => {
+            const userResult = await supabase
+              .from('profiles')
+              .select('full_name, email')
+              .eq('id', review.user_id)
+              .single()
+            
+            return {
+              ...review,
+              profiles: userResult.data || { full_name: 'Anonymous', email: '' }
+            }
+          })
+        )
+        setRecentReviews(enrichedReviews)
+      }
+
+      // Fetch all packages
+      const { data: packagesData, error: packagesError } = await supabase
+        .from('tour_packages')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (packagesError) {
+        console.error('❌ Error fetching packages:', packagesError)
+      }
+
+      // Calculate revenue
+      const { data: revenueData, error: revenueError } = await supabase
+        .from('tour_bookings')
+        .select('total_price')
+        .eq('payment_status', 'paid')
+
+      if (revenueError) {
+        console.error('❌ Error fetching revenue:', revenueError)
+      }
+
+      const totalRevenue = revenueData?.reduce((sum, b) => sum + (b.total_price || 0), 0) || 0
+
+      setStats({
+        totalUsers: usersCount || 0,
+        totalBookings: bookingsCount || 0,
+        totalRevenue: totalRevenue,
+        totalPackages: packagesCount || 0,
+        pendingBookings: pendingCount || 0,
+        totalReviews: reviewsCount || 0,
+        activeUsers: Math.round((usersCount || 0) * 0.7),
+        growthRate: 12.5
+      })
+
+      // Set remaining states
+      setRecentUsers(usersData || [])
+      setPackages(packagesData || [])
+      setUsers(usersData || [])
+
+      console.log('✅ Bookings set in state:', bookingsData?.length || 0)
+
+    } catch (error) {
+      console.error('❌ Error fetching dashboard data:', error)
+      showNotificationMessage('Failed to load dashboard data', 'error')
+    } finally {
+      setLoading(false)
     }
-
-    // Fetch users
-    const { data: usersData, error: usersError } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(10)
-
-    if (usersError) {
-      console.error('❌ Error fetching users:', usersError)
-    }
-
-    // Fetch reviews (without joins)
-    const { data: reviewsData, error: reviewsError } = await supabase
-      .from('trip_reviews')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(5)
-
-    if (reviewsError) {
-      console.error('❌ Error fetching reviews:', reviewsError)
-    } else {
-      // Enrich reviews with user data
-      const enrichedReviews = await Promise.all(
-        (reviewsData || []).map(async (review) => {
-          const userResult = await supabase
-            .from('profiles')
-            .select('full_name, email')
-            .eq('id', review.user_id)
-            .single()
-          
-          return {
-            ...review,
-            profiles: userResult.data || { full_name: 'Anonymous', email: '' }
-          }
-        })
-      )
-      setRecentReviews(enrichedReviews)
-    }
-
-    // Fetch all packages
-    const { data: packagesData, error: packagesError } = await supabase
-      .from('tour_packages')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (packagesError) {
-      console.error('❌ Error fetching packages:', packagesError)
-    }
-
-    // Calculate revenue
-    const { data: revenueData, error: revenueError } = await supabase
-      .from('tour_bookings')
-      .select('total_price')
-      .eq('payment_status', 'paid')
-
-    if (revenueError) {
-      console.error('❌ Error fetching revenue:', revenueError)
-    }
-
-    const totalRevenue = revenueData?.reduce((sum, b) => sum + (b.total_price || 0), 0) || 0
-
-    setStats({
-      totalUsers: usersCount || 0,
-      totalBookings: bookingsCount || 0,
-      totalRevenue: totalRevenue,
-      totalPackages: packagesCount || 0,
-      pendingBookings: pendingCount || 0,
-      totalReviews: reviewsCount || 0,
-      activeUsers: Math.round((usersCount || 0) * 0.7),
-      growthRate: 12.5
-    })
-
-    // Set remaining states
-    setRecentUsers(usersData || [])
-    setPackages(packagesData || [])
-    setUsers(usersData || [])
-
-    console.log('✅ Bookings set in state:', bookingsData?.length || 0)
-
-  } catch (error) {
-    console.error('❌ Error fetching dashboard data:', error)
-    showNotificationMessage('Failed to load dashboard data', 'error')
-  } finally {
-    setLoading(false)
   }
-}
+
   const showNotificationMessage = (message, type = 'success') => {
     setNotificationMessage({ text: message, type })
     setShowNotification(true)
@@ -272,7 +297,7 @@ function AdminDashboard({ user, onLogout }) {
       description: '',
       price: '',
       duration_days: 1,
-      max_guests: 1,
+      max_capacity: 1,
       includes: '',
       excludes: '',
       status: 'active',
@@ -280,7 +305,8 @@ function AdminDashboard({ user, onLogout }) {
       end_date: '',
       available_from: '',
       available_to: '',
-      season: ''
+      season: '',
+      image_url: ''
     })
   }
 
@@ -291,7 +317,7 @@ function AdminDashboard({ user, onLogout }) {
       description: pkg.description || '',
       price: pkg.price || '',
       duration_days: pkg.duration_days || 1,
-      max_guests: pkg.max_guests || 1,
+      max_capacity: pkg.max_capacity || 1,
       includes: Array.isArray(pkg.includes) ? pkg.includes.join(', ') : pkg.includes || '',
       excludes: Array.isArray(pkg.excludes) ? pkg.excludes.join(', ') : pkg.excludes || '',
       status: pkg.status || 'active',
@@ -299,7 +325,8 @@ function AdminDashboard({ user, onLogout }) {
       end_date: pkg.end_date || '',
       available_from: pkg.available_from || '',
       available_to: pkg.available_to || '',
-      season: pkg.season || ''
+      season: pkg.season || '',
+      image_url: pkg.image_url || ''
     })
     setShowPackageForm(true)
   }
@@ -314,7 +341,7 @@ function AdminDashboard({ user, onLogout }) {
         description: packageForm.description,
         price: parseFloat(packageForm.price) || 0,
         duration_days: parseInt(packageForm.duration_days, 10) || 1,
-        max_guests: parseInt(packageForm.max_guests, 10) || 1,
+        max_capacity: parseInt(packageForm.max_capacity, 10) || 1,
         includes: packageForm.includes
           ? packageForm.includes.split(',').map(item => item.trim())
           : [],
@@ -327,6 +354,7 @@ function AdminDashboard({ user, onLogout }) {
         available_from: packageForm.available_from || null,
         available_to: packageForm.available_to || null,
         season: packageForm.season || null,
+        image_url: packageForm.image_url || null,
         user_id: user?.id
       }
 
@@ -1133,19 +1161,52 @@ function AdminDashboard({ user, onLogout }) {
                         padding: '1rem',
                         borderRadius: '12px',
                         border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(26,43,60,0.06)'}`,
-                        background: darkMode ? '#0f0f1a' : '#f9fafb'
+                        background: darkMode ? '#0f0f1a' : '#f9fafb',
+                        position: 'relative'
                       }}
                     >
+                      {/* ✅ Expiry Badge */}
+                      {pkg.is_expired && (
+                        <span style={{
+                          position: 'absolute',
+                          top: '8px',
+                          left: '8px',
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '4px',
+                          background: 'rgba(239, 68, 68, 0.9)',
+                          color: 'white',
+                          fontSize: '10px',
+                          fontWeight: 'bold',
+                          zIndex: 1
+                        }}>
+                          ⛔ EXPIRED
+                        </span>
+                      )}
+                      
+                      {pkg.image_url && (
+                        <img 
+                          src={pkg.image_url} 
+                          alt={pkg.name}
+                          style={{
+                            width: '100%',
+                            height: '150px',
+                            objectFit: 'cover',
+                            borderRadius: '8px',
+                            marginBottom: '0.75rem'
+                          }}
+                        />
+                      )}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                         <h4 style={{ fontSize: '15px', fontWeight: '600' }}>{pkg.name}</h4>
+                        {/* ✅ Updated Status Display */}
                         <span style={{
                           padding: '0.15rem 0.5rem',
                           borderRadius: '12px',
                           fontSize: '10px',
-                          background: pkg.status === 'active' ? '#f0fdf4' : '#fef2f2',
-                          color: pkg.status === 'active' ? '#22c55e' : '#ef4444'
+                          background: pkg.is_expired ? '#fef2f2' : (pkg.status === 'active' ? '#f0fdf4' : '#fef2f2'),
+                          color: pkg.is_expired ? '#ef4444' : (pkg.status === 'active' ? '#22c55e' : '#ef4444')
                         }}>
-                          {pkg.status || 'active'}
+                          {pkg.is_expired ? '⛔ Expired' : (pkg.status || 'active')}
                         </span>
                       </div>
                       <p style={{ fontSize: '13px', color: darkMode ? '#a1a1aa' : '#6b7280', margin: '0.5rem 0' }}>
@@ -1154,7 +1215,7 @@ function AdminDashboard({ user, onLogout }) {
                       <div style={{ display: 'flex', gap: '1rem', fontSize: '13px' }}>
                         <span>💰 ${pkg.price}</span>
                         <span>📅 {pkg.duration_days} days</span>
-                        <span>👥 {pkg.max_guests} guests</span>
+                        <span>👥 {pkg.max_capacity} guests</span>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
                         <button
@@ -1236,11 +1297,11 @@ function AdminDashboard({ user, onLogout }) {
                         />
                       </div>
                       <div>
-                        <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: '600' }}>Max Guests</label>
+                        <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: '600' }}>Max Capacity</label>
                         <input
                           type="number"
-                          value={packageForm.max_guests}
-                          onChange={(e) => setPackageForm({ ...packageForm, max_guests: e.target.value })}
+                          value={packageForm.max_capacity}
+                          onChange={(e) => setPackageForm({ ...packageForm, max_capacity: e.target.value })}
                           required
                           style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', border: '1px solid #d1d5db' }}
                         />
@@ -1329,6 +1390,53 @@ function AdminDashboard({ user, onLogout }) {
                           rows="3"
                           style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', border: '1px solid #d1d5db' }}
                         />
+                      </div>
+                      {/* ✅ Image Upload Section */}
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: '600' }}>
+                          Package Image
+                        </label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const file = e.target.files[0]
+                            if (file) {
+                              const url = await uploadImage(file)
+                              if (url) {
+                                setPackageForm({ ...packageForm, image_url: url })
+                              }
+                            }
+                          }}
+                          style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', border: '1px solid #d1d5db' }}
+                        />
+                        {packageForm.image_url && (
+                          <div style={{ marginTop: '0.5rem', position: 'relative' }}>
+                            <img 
+                              src={packageForm.image_url} 
+                              alt="Preview" 
+                              style={{ width: '100%', maxHeight: '150px', objectFit: 'cover', borderRadius: '8px' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setPackageForm({ ...packageForm, image_url: '' })}
+                              style={{
+                                position: 'absolute',
+                                top: '8px',
+                                right: '8px',
+                                padding: '0.25rem 0.75rem',
+                                background: 'rgba(239, 68, 68, 0.9)',
+                                border: 'none',
+                                borderRadius: '4px',
+                                color: 'white',
+                                cursor: 'pointer',
+                                fontSize: '12px'
+                              }}
+                            >
+                              ✕ Remove
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <button
