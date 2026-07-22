@@ -1,6 +1,7 @@
+// src/components/AIChatbot.jsx
 import React, { useState, useRef, useEffect } from 'react'
 
-function MockChatbot() {
+function AIChatbot() {
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -10,97 +11,49 @@ function MockChatbot() {
   ])
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
+  const [error, setError] = useState('')
   const messagesEndRef = useRef(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const mockResponses = [
-    {
-      keywords: ['hello', 'hi', 'hey'],
-      response: "Hey there! 🌍 Ready to explore the world? Tell me where you want to go!"
-    },
-    {
-      keywords: ['paris', 'france', 'eiffel'],
-      response: "Ah, Paris! 🇫🇷 The City of Light! Don't miss the Eiffel Tower, Louvre Museum, and try croissants at a local bakery. Pro tip: Visit Montmartre for the best views!"
-    },
-    {
-      keywords: ['tokyo', 'japan'],
-      response: "Tokyo is AMAZING! 🇯🇵 Try sushi at Tsukiji Market, visit Shibuya Crossing, and don't miss the cherry blossoms if you go in spring! 🌸"
-    },
-    {
-      keywords: ['bali', 'indonesia'],
-      response: "Bali is paradise! 🏝️ Visit Ubud for rice terraces, relax on Kuta Beach, and try surfing at Canggu. Don't forget to visit a temple! 🛕"
-    },
-    {
-      keywords: ['budget', 'cheap', 'affordable'],
-      response: "Traveling on a budget? 💰 Here are my tips: Stay in hostels, eat street food, use public transport, and book flights 2-3 months in advance for the best deals!"
-    },
-    {
-      keywords: ['hotel', 'stay', 'accommodation'],
-      response: "For accommodations, I recommend checking Booking.com or Airbnb. Pro tip: Read reviews carefully and book places with free cancellation! 🏨"
-    },
-    {
-      keywords: ['food', 'eat', 'restaurant'],
-      response: "Food is the best part of travel! 🍜 I always ask locals for recommendations, avoid tourist traps, and try street food for authentic experiences!"
-    },
-    {
-      keywords: ['beach', 'coast', 'ocean'],
-      response: "Beach vibes! 🌊 Some of my favorites: Maldives, Phuket, Bali, and the Amalfi Coast. Don't forget sunscreen! ☀️"
-    },
-    {
-      keywords: ['adventure', 'hike', 'mountain'],
-      response: "Adventure seeker! 🏔️ Try hiking the Inca Trail, climbing Mount Fuji, or exploring the Swiss Alps. Always bring proper gear and check weather conditions!"
-    },
-    {
-      keywords: ['culture', 'museum', 'history'],
-      response: "Culture lover! 🏛️ Visit local museums, take walking tours, and learn a few words in the local language. It makes such a difference!"
-    },
-    {
-      keywords: ['solo', 'alone', 'single'],
-      response: "Solo travel is LIFE-CHANGING! 🌟 Stay in social hostels, join group tours to meet people, and always trust your instincts. You'll make friends everywhere!"
-    },
-    {
-      keywords: ['packing', 'luggage', 'suitcase'],
-      response: "Packing tips: 🎒 Roll your clothes (saves space!), pack versatile items, and always bring a power bank and a reusable water bottle!"
-    },
-    {
-      keywords: ['flight', 'plane', 'airport'],
-      response: "Flight tips: ✈️ Book on Tuesdays for cheaper tickets, check budget airlines, and always arrive at the airport 2-3 hours early. Safe travels!"
-    },
-    {
-      keywords: ['weather', 'rain', 'cold', 'hot'],
-      response: "Always check the weather before you go! 🌤️ Pack layers, bring a rain jacket just in case, and check if it's the dry/rainy season."
-    }
-  ]
+  // ✅ Get AI response from Groq API
+  const getAIResponse = async (userMessage) => {
+    try {
+      const API_URL = import.meta.env.PROD 
+        ? '/api/ai-chat'
+        : 'http://localhost:3000/api/ai-chat'
 
-  const getMockResponse = (userInput) => {
-    const lowerInput = userInput.toLowerCase()
-    
-    for (let item of mockResponses) {
-      for (let keyword of item.keywords) {
-        if (lowerInput.includes(keyword)) {
-          return item.response
-        }
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          history: messages.slice(-5) // Send last 5 messages for context
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'AI service unavailable')
       }
+
+      const data = await response.json()
+      return data.response
+    } catch (error) {
+      console.error('❌ AI Error:', error)
+      return "I'm having trouble connecting right now. Please try again in a moment! 🙏"
     }
-    
-    const defaultResponses = [
-      "That's a great question! 🤔 Let me think... I'd recommend checking out local travel blogs or asking the hotel reception for the best tips!",
-      "Interesting! 🌍 I'd suggest doing some research on TripAdvisor or joining local Facebook groups for up-to-date advice!",
-      "Great topic! 💡 Did you know that the best travel experiences often come from talking to locals? Try it!",
-      "Hmm, let me help you with that! 📚 I'd recommend creating a travel bucket list and prioritizing your must-see places!",
-      "I love that question! ✨ Travel is all about exploration. My advice? Just go for it and make amazing memories!"
-    ]
-    
-    return defaultResponses[Math.floor(Math.random() * defaultResponses.length)]
   }
 
-  const handleSend = (e) => {
+  const handleSend = async (e) => {
     e.preventDefault()
     if (!input.trim()) return
 
+    // Add user message
     const userMessage = {
       id: messages.length + 1,
       text: input,
@@ -109,16 +62,40 @@ function MockChatbot() {
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setIsTyping(true)
+    setError('')
 
-    setTimeout(() => {
-      const botResponse = {
+    try {
+      const aiResponse = await getAIResponse(input)
+      
+      const botMessage = {
         id: messages.length + 2,
-        text: getMockResponse(input),
+        text: aiResponse,
         sender: 'bot'
       }
-      setMessages(prev => [...prev, botResponse])
+      setMessages(prev => [...prev, botMessage])
+    } catch (err) {
+      setError('Failed to get response. Please try again.')
+      console.error('❌ Error:', err)
+    } finally {
       setIsTyping(false)
-    }, 1000 + Math.random() * 1000)
+    }
+  }
+
+  // ✅ Quick suggestions
+  const suggestions = [
+    { label: '🌍 Best Destinations', value: 'What are the best travel destinations?' },
+    { label: '💰 Budget Tips', value: 'How can I travel on a budget?' },
+    { label: '🏝️ Beach Vacations', value: 'Recommend good beach destinations' },
+    { label: '🎒 Solo Travel', value: 'Tips for solo travel' },
+    { label: '✈️ Flight Tips', value: 'How to find cheap flights?' },
+  ]
+
+  const handleSuggestionClick = (suggestion) => {
+    setInput(suggestion)
+    setTimeout(() => {
+      const fakeEvent = { preventDefault: () => {} }
+      handleSend(fakeEvent)
+    }, 300)
   }
 
   return (
@@ -130,7 +107,6 @@ function MockChatbot() {
       margin: '0 auto',
       overflow: 'hidden',
       border: '1px solid rgba(139, 92, 246, 0.1)',
-      transition: 'all 0.3s ease'
     }}>
       {/* Header */}
       <div style={{
@@ -164,14 +140,14 @@ function MockChatbot() {
               borderRadius: '50%',
               animation: 'pulse 2s infinite'
             }} />
-            Online • Demo Mode
+            Powered by Groq AI • Real-time
           </p>
         </div>
       </div>
 
       {/* Messages */}
       <div className="chat-messages" style={{
-        height: '420px',
+        height: '380px',
         overflowY: 'auto',
         padding: '1.25rem',
         background: '#faf9fe',
@@ -188,7 +164,7 @@ function MockChatbot() {
               animation: 'fadeIn 0.3s ease'
             }}
           >
-            <div className={msg.sender === 'user' ? 'message-user' : 'message-bot'} style={{
+            <div style={{
               maxWidth: '75%',
               padding: '0.75rem 1.25rem',
               borderRadius: '18px',
@@ -201,7 +177,7 @@ function MockChatbot() {
                 : '0 2px 8px rgba(0,0,0,0.06)',
               border: msg.sender === 'bot' ? '1px solid #f0f0f0' : 'none',
               fontSize: '14px',
-              lineHeight: '1.5',
+              lineHeight: '1.6',
               wordBreak: 'break-word'
             }}>
               {msg.text}
@@ -245,7 +221,57 @@ function MockChatbot() {
             </div>
           </div>
         )}
+        {error && (
+          <div style={{
+            padding: '0.5rem',
+            background: '#fee2e2',
+            borderRadius: '8px',
+            color: '#991b1b',
+            fontSize: '13px',
+            textAlign: 'center'
+          }}>
+            ❌ {error}
+          </div>
+        )}
         <div ref={messagesEndRef} />
+      </div>
+
+      {/* Suggestion Chips */}
+      <div style={{
+        padding: '0.5rem 1.25rem',
+        background: '#faf9fe',
+        display: 'flex',
+        gap: '0.5rem',
+        flexWrap: 'wrap',
+        borderTop: '1px solid #f0f0f0'
+      }}>
+        {suggestions.map((suggestion, index) => (
+          <button
+            key={index}
+            onClick={() => handleSuggestionClick(suggestion.value)}
+            style={{
+              padding: '0.3rem 0.8rem',
+              borderRadius: '20px',
+              border: '1px solid #e5e7eb',
+              background: 'white',
+              fontSize: '12px',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              color: '#374151',
+              fontWeight: '500'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.borderColor = '#8B5CF6'
+              e.target.style.background = '#f5f3ff'
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.borderColor = '#e5e7eb'
+              e.target.style.background = 'white'
+            }}
+          >
+            {suggestion.label}
+          </button>
+        ))}
       </div>
 
       {/* Input */}
@@ -262,7 +288,7 @@ function MockChatbot() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about any destination..."
+          placeholder="Ask about travel destinations..."
           style={{
             flex: 1,
             padding: '0.75rem 1rem',
@@ -297,21 +323,10 @@ function MockChatbot() {
             fontSize: '14px',
             transition: 'all 0.2s ease',
             opacity: isTyping ? 0.6 : 1,
-            transform: isTyping ? 'none' : 'scale(1)',
             whiteSpace: 'nowrap'
           }}
-          onMouseEnter={(e) => {
-            if (!isTyping) {
-              e.target.style.transform = 'scale(1.02)'
-              e.target.style.boxShadow = '0 4px 16px rgba(139, 92, 246, 0.35)'
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.transform = 'scale(1)'
-            e.target.style.boxShadow = 'none'
-          }}
         >
-          Send →
+          {isTyping ? 'Thinking...' : 'Send →'}
         </button>
       </form>
 
@@ -322,24 +337,12 @@ function MockChatbot() {
         fontSize: '11px',
         color: '#a1a1aa',
         background: '#faf9fe',
-        borderTop: '1px solid #f0f0f0',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '0.5rem',
-        flexWrap: 'wrap'
+        borderTop: '1px solid #f0f0f0'
       }}>
-        <span style={{
-          display: 'inline-block',
-          width: '6px',
-          height: '6px',
-          background: '#f59e0b',
-          borderRadius: '50%'
-        }} />
-        Demo Mode • Pre-written responses • Real AI coming soon!
+        Powered by Groq AI • Real-time responses • Ask me anything!
       </div>
     </div>
   )
 }
 
-export default MockChatbot
+export default AIChatbot

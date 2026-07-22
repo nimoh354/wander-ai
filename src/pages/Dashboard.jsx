@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react'
 import { useTheme } from '../context/ThemeContext'
 import { supabase } from '../lib/supabase'
 import Navbar from '../components/Navbar'
-import MockChatbot from '../components/MockChatbot'
+import AIChatbot from '../components/AIChatbot'
 import TripGenerator from './TripGenerator'
 import OperatorRegistration from '../components/OperatorRegistration'
 import Profile from './Profile'
@@ -1553,7 +1553,7 @@ const loadAllReviewsFallback = async () => {
 
           {/* Chatbot Section */}
           <div style={{ marginBottom: '2rem' }}>
-            <MockChatbot />
+            <AIChatbot />
           </div>
 
           {/* Trip List Section */}
