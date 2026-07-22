@@ -1,14 +1,21 @@
 // api/ai-chat.js
 import Groq from 'groq-sdk';
 
-// ✅ Initialize Groq with API key
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+// ✅ Check for API key early
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-// ✅ For local development
-if (!process.env.GROQ_API_KEY) {
-  console.warn('⚠️ GROQ_API_KEY is not set');
+if (!GROQ_API_KEY) {
+  console.error('❌ GROQ_API_KEY is not set in environment variables');
+}
+
+// ✅ Initialize Groq with error handling
+let groq;
+try {
+  groq = new Groq({
+    apiKey: GROQ_API_KEY,
+  });
+} catch (error) {
+  console.error('❌ Failed to initialize Groq:', error.message);
 }
 
 export default async function handler(req, res) {
@@ -33,6 +40,13 @@ export default async function handler(req, res) {
     // ✅ Validate input
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
+    }
+
+    // ✅ Check if Groq is initialized
+    if (!groq) {
+      return res.status(500).json({ 
+        error: 'AI service not configured. Please check your GROQ_API_KEY.' 
+      });
     }
 
     console.log('🤖 AI Request:', message);
@@ -78,10 +92,10 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('❌ Groq API Error:', error);
     
-    // ✅ Send more detailed error
+    // ✅ Send detailed error
     res.status(500).json({ 
       error: error.message || 'Failed to get AI response',
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      type: error.type || 'unknown'
     });
   }
 }
