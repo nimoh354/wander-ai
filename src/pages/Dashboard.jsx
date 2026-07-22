@@ -103,8 +103,13 @@ function Dashboard() {
           }
           
           // Fetch trips and reviews
-          await loadTrips(user.id)
-          await loadAllReviews()
+          try {
+            await loadTrips(user.id)
+            await loadAllReviews()
+          } catch (err) {
+            console.error('Error loading data:', err)
+            setFetchError('Could not load some data')
+          }
         }
         setLoading(false)
       } catch (error) {
@@ -119,8 +124,9 @@ function Dashboard() {
   }, [])
 
   // ============================================================
-  // 2.3 HELPER FUNCTIONS (FIXED)
+  // 2.3 HELPER FUNCTIONS (FIXED - WORKING QUERIES)
   // ============================================================
+  
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut()
@@ -130,6 +136,7 @@ function Dashboard() {
     }
   }
 
+  // FIXED: Load trips with working review queries
   const loadTrips = async (userId = null) => {
     const currentUserId = userId || user?.id
     if (!currentUserId) return
@@ -137,6 +144,7 @@ function Dashboard() {
     try {
       setFetchError(null)
       
+      // Fetch trips
       const { data: tripsData, error: tripsError } = await supabase
         .from('trips')
         .select('*')
@@ -151,153 +159,60 @@ function Dashboard() {
         setFetchError('Failed to load trips')
       }
       
-      // FIXED: Use the correct join syntax with proper foreign key reference
-      const { data: reviewsData, error: reviewsError } = await supabase
-        .from('trip_reviews')
-        .select(`
-          *,
-          profiles:user_id (
-            full_name,
-            email
-          )
-        `)
-        .eq('user_id', currentUserId)
-        .order('created_at', { ascending: false })
-      
-      if (!reviewsError && reviewsData) {
-        setReviews(reviewsData || [])
-        console.log(`✅ Loaded ${reviewsData.length} personal reviews`)
-      } else {
-        console.log('Approach 1 failed, trying approach 2...')
-        
-        // FIXED: Alternative syntax with explicit foreign key
-        const { data: reviewsData2, error: reviewsError2 } = await supabase
+      // ============================================================
+      // FIXED: Load personal reviews - using simple SELECT first
+      // ============================================================
+      try {
+        // First, get reviews for this user
+        const { data: reviewsData, error: reviewsError } = await supabase
           .from('trip_reviews')
-          .select(`
-            *,
-            profiles:user_id!inner (
-              full_name,
-              email
-            )
-          `)
+          .select('*')
           .eq('user_id', currentUserId)
           .order('created_at', { ascending: false })
         
-        if (!reviewsError2 && reviewsData2) {
-          setReviews(reviewsData2 || [])
-          console.log(`✅ Loaded ${reviewsData2.length} personal reviews`)
-        } else {
-          console.log('Approach 2 failed, trying approach 3...')
+        if (!reviewsError && reviewsData) {
+          console.log(`✅ Found ${reviewsData.length} personal reviews`)
           
-          // FALLBACK: Fetch without join
-          const { data: reviewsData3, error: reviewsError3 } = await supabase
-            .from('trip_reviews')
-            .select('*')
-            .eq('user_id', currentUserId)
-            .order('created_at', { ascending: false })
-          
-          if (!reviewsError3 && reviewsData3) {
-            // Fetch profile data separately
-            const profileIds = [...new Set(reviewsData3.map(r => r.user_id).filter(Boolean))]
-            let profilesMap = {}
-            if (profileIds.length > 0) {
-              const { data: profilesData } = await supabase
-                .from('profiles')
-                .select('id, full_name, email')
-                .in('id', profileIds)
-              
-              if (profilesData) {
-                profilesMap = profilesData.reduce((acc, p) => {
-                  acc[p.id] = p
-                  return acc
-                }, {})
-              }
-            }
+          // If we have reviews, get profile info separately
+          if (reviewsData.length > 0) {
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('id, full_name, email')
+              .eq('id', currentUserId)
+              .single()
             
-            const combinedData = reviewsData3.map(review => ({
+            // Combine the data
+            const enrichedReviews = reviewsData.map(review => ({
               ...review,
-              profiles: profilesMap[review.user_id] || null
+              profiles: profileData || { full_name: 'You', email: user?.email }
             }))
             
-            setReviews(combinedData)
-            console.log(`✅ Loaded ${combinedData.length} personal reviews (fallback method)`)
+            setReviews(enrichedReviews)
+            console.log(`✅ Loaded ${enrichedReviews.length} personal reviews with profiles`)
           } else {
-            console.error('All approaches failed for personal reviews:', reviewsError3)
             setReviews([])
           }
+        } else if (reviewsError) {
+          console.error('Error fetching reviews:', reviewsError)
+          setReviews([])
         }
+      } catch (reviewErr) {
+        console.warn('Could not load reviews:', reviewErr.message)
+        setReviews([])
       }
+      
     } catch (error) {
       console.error('Error in loadTrips:', error)
       setFetchError('An unexpected error occurred')
     }
   }
 
-  // FIXED: Public reviews with correct join syntax
+  // FIXED: Load all public reviews with working queries
   const loadAllReviews = async () => {
     try {
-      // FIXED: Correct join syntax using the table name with the foreign key reference
-      const { data, error } = await supabase
-        .from('trip_reviews')
-        .select(`
-          *,
-          profiles:user_id (
-            full_name,
-            email
-          ),
-          trips:trip_id (
-            destination,
-            user_id
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .limit(50)
-
-      if (!error && data) {
-        setAllReviews(data || [])
-        console.log(`✅ Loaded ${data.length} public reviews`)
-        return
-      } else {
-        console.log('Approach 1 failed for public reviews, trying approach 2...')
-        
-        // FIXED: Alternative with inner join
-        const { data: data2, error: error2 } = await supabase
-          .from('trip_reviews')
-          .select(`
-            *,
-            profiles:user_id!inner (
-              full_name,
-              email
-            ),
-            trips:trip_id!inner (
-              destination,
-              user_id
-            )
-          `)
-          .order('created_at', { ascending: false })
-          .limit(50)
-        
-        if (!error2 && data2) {
-          setAllReviews(data2 || [])
-          console.log(`✅ Loaded ${data2.length} public reviews`)
-          return
-        } else {
-          console.log('Approach 2 failed for public reviews, using fallback...')
-          await loadAllReviewsFallback()
-        }
-      }
-    } catch (error) {
-      console.error('Error in loadAllReviews:', error)
-      await loadAllReviewsFallback()
-    }
-  }
-
-  // FALLBACK: Fetch public reviews without joins
-  const loadAllReviewsFallback = async () => {
-    try {
-      console.log('Using fallback method to fetch public reviews...')
+      console.log('Loading all reviews...')
       
-      // Fetch all reviews
+      // Step 1: Get all reviews
       const { data: reviewsData, error: reviewsError } = await supabase
         .from('trip_reviews')
         .select('*')
@@ -305,18 +220,24 @@ function Dashboard() {
         .limit(50)
 
       if (reviewsError) {
-        console.error('Error in fallback fetch:', reviewsError)
+        console.error('Error fetching reviews:', reviewsError)
         setAllReviews([])
         return
       }
 
       if (!reviewsData || reviewsData.length === 0) {
+        console.log('No reviews found')
         setAllReviews([])
         return
       }
 
-      // Fetch profile data for each review
+      console.log(`✅ Found ${reviewsData.length} reviews`)
+
+      // Step 2: Get all unique user IDs from reviews
       const userIds = [...new Set(reviewsData.map(r => r.user_id).filter(Boolean))]
+      console.log(`👤 Found ${userIds.length} unique users`)
+
+      // Step 3: Fetch profiles for these users
       let profilesMap = {}
       if (userIds.length > 0) {
         const { data: profilesData, error: profilesError } = await supabase
@@ -329,11 +250,17 @@ function Dashboard() {
             acc[p.id] = p
             return acc
           }, {})
+          console.log(`✅ Loaded ${profilesData.length} profiles`)
+        } else {
+          console.warn('Could not fetch profiles:', profilesError)
         }
       }
 
-      // Fetch trip data for each review
+      // Step 4: Get all unique trip IDs from reviews
       const tripIds = [...new Set(reviewsData.map(r => r.trip_id).filter(Boolean))]
+      console.log(`📍 Found ${tripIds.length} unique trips`)
+
+      // Step 5: Fetch trip data for these reviews
       let tripsMap = {}
       if (tripIds.length > 0) {
         const { data: tripsData, error: tripsError } = await supabase
@@ -346,10 +273,13 @@ function Dashboard() {
             acc[t.id] = t
             return acc
           }, {})
+          console.log(`✅ Loaded ${tripsData.length} trips`)
+        } else {
+          console.warn('Could not fetch trips:', tripsError)
         }
       }
 
-      // Combine the data
+      // Step 6: Combine all the data
       const combinedData = reviewsData.map(review => ({
         ...review,
         profiles: profilesMap[review.user_id] || null,
@@ -357,9 +287,10 @@ function Dashboard() {
       }))
 
       setAllReviews(combinedData)
-      console.log(`✅ Loaded ${combinedData.length} public reviews (fallback method)`)
+      console.log(`✅ Combined ${combinedData.length} reviews with profiles and trips`)
+
     } catch (error) {
-      console.error('Error in loadAllReviewsFallback:', error)
+      console.error('Error in loadAllReviews:', error)
       setAllReviews([])
     }
   }
@@ -393,7 +324,7 @@ function Dashboard() {
   }
 
   // ============================================================
-  // 2.5 PAGE VIEWS (Conditions)
+  // 2.5 PAGE VIEWS (Conditions) - [KEPT THE SAME AS YOUR ORIGINAL]
   // ============================================================
 
   // ---- Page: Operator Dashboard ----
@@ -1243,7 +1174,7 @@ function Dashboard() {
             </div>
           </div>
 
-          {/* Quick Actions Grid */}
+          {/* Quick Actions Grid - [KEPT THE SAME AS YOUR ORIGINAL] */}
           <div className="quick-actions" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -1903,7 +1834,7 @@ function Dashboard() {
           )}
 
           {/* ============================================================
-            PUBLIC REVIEWS SECTION - Shows reviews from ALL users
+            COMMUNITY REVIEWS SECTION - FIXED with proper error handling
             ============================================================ */}
           <div style={{ marginTop: '3rem' }}>
             <div style={{
@@ -2082,7 +2013,7 @@ function Dashboard() {
                               padding: '0.15rem 0.6rem',
                               borderRadius: '12px'
                             }}>
-                              {new Date(review.created_at).toLocaleDateString()}
+                              {review.created_at ? new Date(review.created_at).toLocaleDateString() : 'Recent'}
                             </span>
                           </div>
                           <div style={{ marginTop: '0.25rem' }}>
@@ -2109,14 +2040,14 @@ function Dashboard() {
                           </span>
                         )}
                       </div>
-                      {review.comment && (
+                      {review.review && (
                         <p style={{ 
                           color: darkMode ? '#d1d5db' : '#4b5563', 
                           marginTop: '0.75rem',
                           lineHeight: '1.6',
                           fontSize: '14px'
                         }}>
-                          {review.comment}
+                          {review.review}
                         </p>
                       )}
                     </div>
