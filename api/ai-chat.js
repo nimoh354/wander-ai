@@ -247,7 +247,7 @@ export default async function handler(req, res) {
 
     const completion = await groq.chat.completions.create({
       messages: messages,
-      model: 'llama-3.1-70b-versatile', // Best for trip planning
+      model: 'llama-3.1-8b-instant', // Best for trip planning
       temperature: mode === 'planner' ? 0.7 : 0.5,
       max_tokens: maxTokens,
       top_p: 0.9,
