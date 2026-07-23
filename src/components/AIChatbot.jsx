@@ -5,25 +5,29 @@ function AIChatbot() {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      text: "👋 Hi! I'm WanderAI's travel assistant! Ask me anything about travel, and I'll help you plan your adventure!",
+      text: "👋 Hi! I'm WanderAI's Trip Planner! Tell me where you want to go, and I'll create a detailed itinerary for you! 🌍",
       sender: 'bot'
     }
   ])
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [error, setError] = useState('')
+  const [mode, setMode] = useState('planner') // 'planner' or 'chat'
   const messagesEndRef = useRef(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // ✅ Get AI response from Groq API
+  // ✅ Enhanced: Get AI response with trip planning context
   const getAIResponse = async (userMessage) => {
     try {
       const API_URL = import.meta.env.PROD 
         ? '/api/ai-chat'
         : 'http://localhost:3000/api/ai-chat'
+
+      // Track trip info
+      const tripContext = extractTripInfo(messages, userMessage);
 
       const response = await fetch(API_URL, {
         method: 'POST',
@@ -32,12 +36,17 @@ function AIChatbot() {
         },
         body: JSON.stringify({
           message: userMessage,
-          history: messages.slice(-5) // Send last 5 messages for context
+          history: messages.slice(-8),
+          mode: mode, // Send mode to backend
+          tripState: tripContext
         })
       })
 
       if (!response.ok) {
         const errorData = await response.json()
+        if (response.status === 429) {
+          return "⏳ I'm getting a lot of requests right now. Please wait a moment and try again! 🙏"
+        }
         throw new Error(errorData.error || 'AI service unavailable')
       }
 
@@ -49,11 +58,76 @@ function AIChatbot() {
     }
   }
 
+  // ✅ Helper: Extract trip info
+  const extractTripInfo = (messages, newMessage) => {
+    const allText = messages.map(m => m.text).join(' ') + ' ' + newMessage;
+    const lower = allText.toLowerCase();
+    
+    const destinations = ['kenya', 'bali', 'paris', 'tokyo', 'london', 'rome', 
+                          'dubai', 'singapore', 'bangkok', 'sydney', 'cape town', 
+                          'maldives', 'hawaii', 'new york', 'barcelona'];
+    
+    let destination = null;
+    for (const dest of destinations) {
+      if (lower.includes(dest)) {
+        destination = dest;
+        break;
+      }
+    }
+    
+    return {
+      destination: destination,
+      hasDates: /\b\d+\s*(days?|nights?)\b/.test(lower),
+      hasBudget: /\$\d+/.test(lower) || /budget/i.test(lower),
+      hasGroup: /(family|solo|couple|group|kids?|children|adults?)/i.test(lower),
+      hasInterests: /(adventure|beach|culture|food|nature|wildlife|shopping)/i.test(lower),
+      messageCount: messages.length
+    };
+  }
+
+  // ✅ Format AI responses
+  const formatAIResponse = (text) => {
+    const lines = text.split('\n');
+    
+    return lines.map((line, index) => {
+      // Day headers
+      if (/^.*Day \d+[:|]/.test(line) || line.includes('📍')) {
+        return <div key={index} style={{ 
+          fontWeight: '700', 
+          color: '#7C3AED', 
+          fontSize: '15px',
+          marginTop: '8px',
+          borderBottom: '2px solid #f0f0f0',
+          paddingBottom: '4px'
+        }}>{line}</div>;
+      }
+      
+      // Activity lines
+      if (/^[•\-⭐🌅🌤️🌙💰💡]/.test(line.trim())) {
+        return <div key={index} style={{ 
+          paddingLeft: '8px',
+          marginTop: '2px',
+          fontSize: '14px'
+        }}>{line}</div>;
+      }
+      
+      // Cost lines
+      if (/\$\d+/.test(line)) {
+        return <div key={index} style={{ 
+          color: '#059669', 
+          fontWeight: '600',
+          marginTop: '4px'
+        }}>💰 {line}</div>;
+      }
+      
+      return <div key={index} style={{ marginTop: '2px' }}>{line}</div>;
+    });
+  };
+
   const handleSend = async (e) => {
     e.preventDefault()
     if (!input.trim()) return
 
-    // Add user message
     const userMessage = {
       id: messages.length + 1,
       text: input,
@@ -81,13 +155,13 @@ function AIChatbot() {
     }
   }
 
-  // ✅ Quick suggestions
+  // ✅ Trip planning suggestions
   const suggestions = [
-    { label: '🌍 Best Destinations', value: 'What are the best travel destinations?' },
-    { label: '💰 Budget Tips', value: 'How can I travel on a budget?' },
-    { label: '🏝️ Beach Vacations', value: 'Recommend good beach destinations' },
-    { label: '🎒 Solo Travel', value: 'Tips for solo travel' },
-    { label: '✈️ Flight Tips', value: 'How to find cheap flights?' },
+    { label: '✈️ Plan a Trip', value: 'I want to plan a trip. Where should I start?' },
+    { label: '🌍 Safari in Kenya', value: 'Plan a 5-day safari in Kenya for my family of 4 with a $3000 budget' },
+    { label: '🏝️ Bali Vacation', value: 'Create a 7-day itinerary for Bali for a couple on a $2000 budget' },
+    { label: '💰 Budget Trip', value: 'Help me plan a budget-friendly European trip for 10 days' },
+    { label: '🎒 Solo Adventure', value: "I'm traveling solo to Japan for 2 weeks. What should I do?" },
   ]
 
   const handleSuggestionClick = (suggestion) => {
@@ -108,41 +182,64 @@ function AIChatbot() {
       overflow: 'hidden',
       border: '1px solid rgba(139, 92, 246, 0.1)',
     }}>
-      {/* Header */}
+      {/* Header with Mode Toggle */}
       <div style={{
         background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
         padding: '1.25rem 1.5rem',
         color: 'white',
         display: 'flex',
         alignItems: 'center',
+        justifyContent: 'space-between',
         gap: '0.75rem',
         flexWrap: 'wrap'
       }}>
-        <span style={{ fontSize: '28px' }}>🤖</span>
-        <div>
-          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>
-            WanderAI Assistant
-          </h3>
-          <p style={{ 
-            margin: 0, 
-            fontSize: '12px', 
-            opacity: 0.9,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            flexWrap: 'wrap'
-          }}>
-            <span style={{
-              display: 'inline-block',
-              width: '8px',
-              height: '8px',
-              background: '#4ade80',
-              borderRadius: '50%',
-              animation: 'pulse 2s infinite'
-            }} />
-            Powered by Groq AI • Real-time
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <span style={{ fontSize: '28px' }}>🤖</span>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>
+              WanderAI {mode === 'planner' ? 'Trip Planner' : 'Assistant'}
+            </h3>
+            <p style={{ 
+              margin: 0, 
+              fontSize: '12px', 
+              opacity: 0.9,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              flexWrap: 'wrap'
+            }}>
+              <span style={{
+                display: 'inline-block',
+                width: '8px',
+                height: '8px',
+                background: '#4ade80',
+                borderRadius: '50%',
+                animation: 'pulse 2s infinite'
+              }} />
+              {mode === 'planner' ? '📍 Create your dream itinerary' : '💬 Quick travel questions'}
+            </p>
+          </div>
         </div>
+        
+        <button
+          onClick={() => setMode(mode === 'chat' ? 'planner' : 'chat')}
+          style={{
+            padding: '0.3rem 0.8rem',
+            borderRadius: '20px',
+            border: '1px solid rgba(255,255,255,0.3)',
+            background: 'rgba(255,255,255,0.15)',
+            color: 'white',
+            fontSize: '12px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            backdropFilter: 'blur(4px)',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => e.target.style.background = 'rgba(255,255,255,0.25)'}
+          onMouseLeave={(e) => e.target.style.background = 'rgba(255,255,255,0.15)'}
+        >
+          {mode === 'chat' ? '🗺️ Switch to Trip Planner' : '💬 Switch to Chat'}
+        </button>
       </div>
 
       {/* Messages */}
@@ -180,7 +277,7 @@ function AIChatbot() {
               lineHeight: '1.6',
               wordBreak: 'break-word'
             }}>
-              {msg.text}
+              {msg.sender === 'bot' ? formatAIResponse(msg.text) : msg.text}
             </div>
           </div>
         ))}
@@ -288,7 +385,9 @@ function AIChatbot() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about travel destinations..."
+          placeholder={mode === 'planner' 
+            ? "Tell me your dream trip... 🌍" 
+            : "Ask about travel destinations..."}
           style={{
             flex: 1,
             padding: '0.75rem 1rem',
@@ -326,7 +425,7 @@ function AIChatbot() {
             whiteSpace: 'nowrap'
           }}
         >
-          {isTyping ? 'Thinking...' : 'Send →'}
+          {isTyping ? 'Planning...' : 'Send ✈️'}
         </button>
       </form>
 
@@ -339,8 +438,26 @@ function AIChatbot() {
         background: '#faf9fe',
         borderTop: '1px solid #f0f0f0'
       }}>
-        Powered by Groq AI • Real-time responses • Ask me anything!
+        {mode === 'planner' 
+          ? '🗺️ Powered by Groq AI • Plan your dream trip today!' 
+          : '💬 Powered by Groq AI • Ask me anything!'}
       </div>
+
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        @keyframes typing {
+          0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+          30% { transform: translateY(-10px); opacity: 1; }
+        }
+      `}</style>
     </div>
   )
 }
