@@ -1,5 +1,6 @@
 // src/components/AIChat.jsx
 import React, { useState, useRef, useEffect } from 'react'
+import { travelAgents } from '../data/travelAgents'
 
 const bookingWebsites = {
   'flights': [
@@ -9,10 +10,6 @@ const bookingWebsites = {
     { name: 'Expedia', url: 'https://www.expedia.com', description: 'Flights & packages', icon: '🏢' },
     { name: 'Momondo', url: 'https://www.momondo.com', description: 'Find cheap flights', icon: '🌍' },
     { name: 'Kiwi', url: 'https://www.kiwi.com', description: 'Budget flights worldwide', icon: '🐦' },
-    { name: 'JetBlue', url: 'https://www.jetblue.com', description: 'US & international flights', icon: '🔵' },
-    { name: 'Delta', url: 'https://www.delta.com', description: 'Major US airline', icon: '🔺' },
-    { name: 'Emirates', url: 'https://www.emirates.com', description: 'Luxury international flights', icon: '✨' },
-    { name: 'Qatar Airways', url: 'https://www.qatarairways.com', description: 'Award-winning airline', icon: '🏆' },
   ],
   'hotels': [
     { name: 'Booking.com', url: 'https://www.booking.com', description: 'Best hotel deals worldwide', icon: '🏨' },
@@ -21,10 +18,6 @@ const bookingWebsites = {
     { name: 'Agoda', url: 'https://www.agoda.com', description: 'Hotels in Asia & beyond', icon: '🌏' },
     { name: 'Marriott', url: 'https://www.marriott.com', description: 'Luxury hotels worldwide', icon: '⭐' },
     { name: 'Hilton', url: 'https://www.hilton.com', description: 'Premium hotel stays', icon: '💎' },
-    { name: 'Hostelworld', url: 'https://www.hostelworld.com', description: 'Budget hostels', icon: '🎒' },
-    { name: 'VRBO', url: 'https://www.vrbo.com', description: 'Vacation rentals', icon: '🏖️' },
-    { name: 'Trivago', url: 'https://www.trivago.com', description: 'Compare hotel prices', icon: '📊' },
-    { name: 'Oyo Rooms', url: 'https://www.oyorooms.com', description: 'Budget hotels', icon: '🟢' },
   ],
   'activities': [
     { name: 'Viator', url: 'https://www.viator.com', description: 'Tours & activities', icon: '🎯' },
@@ -33,7 +26,6 @@ const bookingWebsites = {
     { name: 'TripAdvisor', url: 'https://www.tripadvisor.com', description: 'Reviews & attractions', icon: '📝' },
     { name: 'Airbnb Experiences', url: 'https://www.airbnb.com/experiences', description: 'Unique local experiences', icon: '🎨' },
     { name: 'Musement', url: 'https://www.musement.com', description: 'Tickets & tours', icon: '🎭' },
-    { name: 'Tiqets', url: 'https://www.tiqets.com', description: 'Museum & attraction tickets', icon: '🏛️' },
   ],
   'packages': [
     { name: 'Expedia', url: 'https://www.expedia.com', description: 'Vacation packages', icon: '🌴' },
@@ -138,31 +130,55 @@ function AIChat() {
     return null
   }
 
+  const findAgents = (category) => {
+    if (category === 'flights') return travelAgents.flights || []
+    if (category === 'hotels') return travelAgents.hotels || []
+    if (category === 'activities') return travelAgents.activities || []
+    if (category === 'packages') return travelAgents.packages || []
+    // Return general agents if no specific category
+    return travelAgents.general || []
+  }
+
   const generateMockResponse = (userMessage) => {
     const lowerMsg = userMessage.toLowerCase()
     let suggestions = []
     let responseText = ''
     let destination = extractDestination(userMessage) || 'your destination'
     let region = detectRegion(userMessage)
+    let matchedAgents = []
+    let category = 'general'
 
+    // Flight related
     if (lowerMsg.includes('flight') || lowerMsg.includes('fly') || lowerMsg.includes('plane') || lowerMsg.includes('airport') || lowerMsg.includes('airfare')) {
       suggestions = [...bookingWebsites.flights]
       if (region) suggestions = [...suggestions, ...bookingWebsites[region]]
+      category = 'flights'
+      matchedAgents = travelAgents.flights || []
       responseText = `✈️ Here are the best websites to book flights to ${destination}:`
     }
+    // Hotel related
     else if (lowerMsg.includes('hotel') || lowerMsg.includes('stay') || lowerMsg.includes('accommodation') || lowerMsg.includes('hostel') || lowerMsg.includes('resort') || lowerMsg.includes('lodge')) {
       suggestions = [...bookingWebsites.hotels]
       if (region) suggestions = [...suggestions, ...bookingWebsites[region]]
+      category = 'hotels'
+      matchedAgents = travelAgents.hotels || []
       responseText = `🏨 Here are the best websites to book hotels and accommodations in ${destination}:`
     }
+    // Activities related
     else if (lowerMsg.includes('activity') || lowerMsg.includes('tour') || lowerMsg.includes('attraction') || lowerMsg.includes('thing to do') || lowerMsg.includes('sight') || lowerMsg.includes('experience')) {
       suggestions = bookingWebsites.activities
+      category = 'activities'
+      matchedAgents = travelAgents.activities || []
       responseText = `🎯 Here are the best websites to book tours and activities in ${destination}:`
     }
+    // Packages/Deals
     else if (lowerMsg.includes('package') || lowerMsg.includes('deal') || lowerMsg.includes('all-inclusive') || lowerMsg.includes('vacation') || lowerMsg.includes('holiday')) {
       suggestions = bookingWebsites.packages
+      category = 'packages'
+      matchedAgents = travelAgents.packages || []
       responseText = `🌴 Here are the best websites for vacation packages and deals to ${destination}:`
     }
+    // Car rentals
     else if (lowerMsg.includes('car') || lowerMsg.includes('rental') || lowerMsg.includes('drive') || lowerMsg.includes('rent a car')) {
       suggestions = [
         { name: 'Hertz', url: 'https://www.hertz.com', description: 'Car rentals worldwide', icon: '🚗' },
@@ -171,18 +187,28 @@ function AIChat() {
         { name: 'Budget', url: 'https://www.budget.com', description: 'Budget car rentals', icon: '💰' },
         { name: 'Sixt', url: 'https://www.sixt.com', description: 'Luxury car rentals', icon: '🏎️' },
       ]
+      category = 'general'
+      matchedAgents = travelAgents.general || []
       responseText = `🚗 Here are the best websites for car rentals in ${destination}:`
     }
+    // General help
     else {
       suggestions = bookingWebsites.general
+      matchedAgents = travelAgents.general || []
       responseText = `🌍 Here are some general travel resources to help you plan your trip to ${destination}:`
     }
 
+    // Remove duplicates from suggestions
     const uniqueSuggestions = suggestions.filter((site, index, self) => 
       index === self.findIndex(s => s.name === site.name)
     )
 
-    return { text: responseText, suggestions: uniqueSuggestions }
+    return { 
+      text: responseText, 
+      suggestions: uniqueSuggestions.slice(0, 6),
+      agents: matchedAgents.slice(0, 3),
+      category: category
+    }
   }
 
   const handleSend = async (e) => {
@@ -197,21 +223,29 @@ function AIChat() {
 
     await new Promise(resolve => setTimeout(resolve, 600))
 
-    const { text, suggestions } = generateMockResponse(userMessage)
+    const { text, suggestions, agents, category } = generateMockResponse(userMessage)
 
     const aiMessage = {
       role: 'assistant',
       content: text,
-      suggestions: suggestions
+      suggestions: suggestions || [],
+      agents: agents || [],
+      category: category || 'general'
     }
 
     setMessages(prev => [...prev, aiMessage])
     setLoading(false)
   }
 
-  const formatSuggestions = (suggestions) => {
-    if (!suggestions || suggestions.length === 0) return []
-    return suggestions.slice(0, 8)
+  const connectWithAgent = (agent) => {
+    const message = `Hi! I'm interested in getting help with my travel plans. Can you assist me?\n\n- Agent: ${agent.name} (${agent.title})\n- Email: ${agent.email}\n- Phone: ${agent.phone}\n- Specialty: ${agent.specialty}`
+    
+    navigator.clipboard.writeText(message).then(() => {
+      alert(`✅ Agent contact info copied!\n\nAgent: ${agent.name}\nEmail: ${agent.email}\nPhone: ${agent.phone}\n\nYou can now email or call them directly.`)
+    }).catch(() => {
+      // Fallback
+      alert(`📞 Contact ${agent.name}\n📧 ${agent.email}\n📱 ${agent.phone}\n\nSpecialty: ${agent.specialty}`)
+    })
   }
 
   return (
@@ -220,14 +254,14 @@ function AIChat() {
       flexDirection: 'column',
       height: '600px',
       maxHeight: '80vh',
-      background: '#0a1628', // Navy blue background
+      background: '#0a1628',
       borderRadius: '24px',
       boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
       border: '1px solid rgba(255,255,255,0.06)',
       overflow: 'hidden',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
     }}>
-      {/* Header - Navy Theme */}
+      {/* Header */}
       <div style={{
         padding: '1.25rem 1.5rem',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
@@ -301,7 +335,7 @@ function AIChat() {
         </div>
       </div>
 
-      {/* Messages - Navy Theme */}
+      {/* Messages */}
       <div style={{
         flex: 1,
         overflowY: 'auto',
@@ -340,6 +374,10 @@ function AIChat() {
               lineHeight: '1.6'
             }}>
               Ask me anything about your trip - flights, hotels, activities, car rentals, and more!
+              <br />
+              <span style={{ color: '#34d399', fontSize: '13px' }}>
+                🤝 Connect with real travel agents for personalized help
+              </span>
             </p>
             <div style={{
               display: 'flex',
@@ -356,7 +394,8 @@ function AIChat() {
                 <button
                   key={i}
                   onClick={() => {
-                    setInput(example.replace('✈️ ', '').replace('🏨 ', '').replace('🎯 ', '').replace('🚗 ', ''))
+                    const cleanText = example.replace('✈️ ', '').replace('🏨 ', '').replace('🎯 ', '').replace('🚗 ', '')
+                    setInput(cleanText)
                     setTimeout(() => {
                       const fakeEvent = { preventDefault: () => {} }
                       handleSend(fakeEvent)
@@ -450,6 +489,7 @@ function AIChat() {
                         {msg.content}
                       </div>
 
+                      {/* Booking Websites */}
                       {msg.suggestions && msg.suggestions.length > 0 && (
                         <div style={{
                           marginTop: '0.75rem',
@@ -457,7 +497,7 @@ function AIChat() {
                           gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
                           gap: '0.5rem'
                         }}>
-                          {formatSuggestions(msg.suggestions).map((site, i) => (
+                          {msg.suggestions.map((site, i) => (
                             <a
                               key={i}
                               href={site.url}
@@ -502,6 +542,119 @@ function AIChat() {
                               </span>
                             </a>
                           ))}
+                        </div>
+                      )}
+
+                      {/* Travel Agents Section */}
+                      {msg.agents && msg.agents.length > 0 && (
+                        <div style={{
+                          marginTop: '1rem',
+                          padding: '1rem',
+                          background: 'rgba(79, 70, 229, 0.08)',
+                          borderRadius: '12px',
+                          border: '1px solid rgba(79, 70, 229, 0.15)'
+                        }}>
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            marginBottom: '0.75rem'
+                          }}>
+                            <span style={{ fontSize: '18px' }}>🤝</span>
+                            <span style={{ color: '#e8edf5', fontWeight: '600', fontSize: '14px' }}>
+                              Our Travel Agents can help you!
+                            </span>
+                            <span style={{
+                              fontSize: '10px',
+                              padding: '0.2rem 0.6rem',
+                              background: '#4F46E5',
+                              color: 'white',
+                              borderRadius: '12px'
+                            }}>
+                              Live
+                            </span>
+                          </div>
+
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                            gap: '0.5rem'
+                          }}>
+                            {msg.agents.map((agent, i) => (
+                              <div
+                                key={i}
+                                style={{
+                                  padding: '0.75rem',
+                                  background: '#0d1b33',
+                                  borderRadius: '10px',
+                                  border: '1px solid rgba(255,255,255,0.06)'
+                                }}
+                              >
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.5rem',
+                                  marginBottom: '0.25rem'
+                                }}>
+                                  <span style={{ fontSize: '20px' }}>{agent.avatar || '👤'}</span>
+                                  <div>
+                                    <div style={{ color: '#e8edf5', fontWeight: '600', fontSize: '13px' }}>
+                                      {agent.name}
+                                    </div>
+                                    <div style={{ color: '#7a8ba8', fontSize: '11px' }}>
+                                      {agent.title}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.5rem',
+                                  marginTop: '0.25rem'
+                                }}>
+                                  <span style={{ fontSize: '11px', color: '#34d399' }}>
+                                    ● {agent.availability || 'Available'}
+                                  </span>
+                                  <span style={{ fontSize: '11px', color: '#7a8ba8' }}>
+                                    ⭐ {agent.rating || '4.8'}
+                                  </span>
+                                </div>
+                                <div style={{
+                                  fontSize: '11px',
+                                  color: '#7a8ba8',
+                                  marginTop: '0.25rem'
+                                }}>
+                                  {agent.experience || ''}
+                                </div>
+                                <button
+                                  onClick={() => connectWithAgent(agent)}
+                                  style={{
+                                    width: '100%',
+                                    marginTop: '0.5rem',
+                                    padding: '0.4rem',
+                                    background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    fontSize: '12px',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.target.style.transform = 'scale(1.02)'
+                                    e.target.style.boxShadow = '0 2px 8px rgba(79, 70, 229, 0.3)'
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.target.style.transform = 'scale(1)'
+                                    e.target.style.boxShadow = 'none'
+                                  }}
+                                >
+                                  📩 Connect with {agent.name.split(' ')[0]}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -570,7 +723,7 @@ function AIChat() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input - Navy Theme */}
+      {/* Input */}
       <form onSubmit={handleSend} style={{
         padding: '1rem 1.5rem',
         borderTop: '1px solid rgba(255,255,255,0.06)',
