@@ -1,22 +1,54 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
 function TripShare({ trip, onClose }) {
   const [shareLink, setShareLink] = useState('')
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [user, setUser] = useState(null)
+  const [loadingUser, setLoadingUser] = useState(true)
+
+  // Get current user on mount
+  useEffect(() => {
+    const getUser = async () => {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser()
+        if (error) throw error
+        console.log('✅ Current user loaded:', user?.email)
+        setUser(user)
+      } catch (error) {
+        console.error('❌ Error getting user:', error)
+      } finally {
+        setLoadingUser(false)
+      }
+    }
+    getUser()
+  }, [])
 
   const generateShareLink = async () => {
+    // Check if user is loaded and logged in
+    if (loadingUser) {
+      alert('⏳ Please wait, loading user...')
+      return
+    }
+    
+    if (!user || !user.id) {
+      alert('❌ Please log in to share a trip')
+      return
+    }
+
     setLoading(true)
     
     try {
-      // Create a public share record
+      // Create a public share record with user_id
       const { data, error } = await supabase
         .from('shared_trips')
         .insert([
           {
             trip_id: trip.id,
-            share_token: Math.random().toString(36).substring(2, 15),
+            user_id: user.id,
+            share_token: Math.random().toString(36).substring(2, 15) + 
+                        Math.random().toString(36).substring(2, 15),
             views: 0
           }
         ])
@@ -29,6 +61,7 @@ function TripShare({ trip, onClose }) {
       const url = `${window.location.origin}/shared/${data.share_token}`
       setShareLink(url)
     } catch (error) {
+      console.error('Error generating share link:', error)
       alert('❌ Error generating share link: ' + error.message)
     } finally {
       setLoading(false)
@@ -75,6 +108,7 @@ function TripShare({ trip, onClose }) {
       right: 0,
       bottom: 0,
       background: 'rgba(0,0,0,0.5)',
+      backdropFilter: 'blur(4px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -125,7 +159,7 @@ function TripShare({ trip, onClose }) {
         {!shareLink ? (
           <button
             onClick={generateShareLink}
-            disabled={loading}
+            disabled={loading || loadingUser}
             style={{
               width: '100%',
               padding: '0.85rem',
@@ -135,12 +169,13 @@ function TripShare({ trip, onClose }) {
               borderRadius: '12px',
               fontSize: '16px',
               fontWeight: '600',
-              cursor: 'pointer',
-              opacity: loading ? 0.7 : 1,
+              cursor: (loading || loadingUser) ? 'not-allowed' : 'pointer',
+              opacity: (loading || loadingUser) ? 0.7 : 1,
               transition: 'all 0.2s ease'
             }}
           >
-            {loading ? 'Generating...' : '🔗 Generate Share Link'}
+            {loadingUser ? '⏳ Loading user...' : 
+             loading ? '⏳ Generating...' : '🔗 Generate Share Link'}
           </button>
         ) : (
           <div>

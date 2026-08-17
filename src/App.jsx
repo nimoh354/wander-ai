@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import SharedTrip from './pages/SharedTrip'
 import AdminDashboard from './pages/AdminDashboard'
 import NewAdminLogin from './pages/NewAdminLogin'
+import TripAssistant from './pages/TripAssistant'  // ✅ Import TripAssistant
 import { ThemeProvider } from './context/ThemeContext'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -13,6 +14,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [isSharedTrip, setIsSharedTrip] = useState(false)
   const [isAdminRoute, setIsAdminRoute] = useState(false)
+  const [isAssistantRoute, setIsAssistantRoute] = useState(false)  // ✅ New state
   const [adminPath, setAdminPath] = useState('')
 
   useEffect(() => {
@@ -29,6 +31,13 @@ function App() {
     if (pathname === '/admin' || pathname.startsWith('/admin/')) {
       setIsAdminRoute(true)
       setAdminPath(pathname)
+      setLoading(false)
+      return
+    }
+
+    // ✅ Check for assistant route
+    if (pathname === '/assistant') {
+      setIsAssistantRoute(true)
       setLoading(false)
       return
     }
@@ -89,6 +98,16 @@ function App() {
     )
   }
 
+  // ✅ Assistant route
+  if (isAssistantRoute) {
+    return (
+      <ThemeProvider>
+        <TripAssistant />
+      </ThemeProvider>
+    )
+  }
+
+  // Admin routes
   if (isAdminRoute) {
     const adminUser = typeof window !== 'undefined'
       ? JSON.parse(localStorage.getItem('adminUser') || 'null')

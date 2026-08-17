@@ -48,29 +48,67 @@ function Navbar({ user, onLogout }) {
         </span>
       </div>
 
-<span
-  onClick={() => window.location.href = '/admin'}
-  style={{
-    fontSize: '12px',
-    color: darkMode ? '#6b7280' : '#9ca3af',
-    cursor: 'pointer',
-    opacity: 0.6,
-    transition: 'all 0.2s ease',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.25rem'
-  }}
-  onMouseEnter={(e) => {
-    e.target.style.opacity = '1'
-    e.target.style.color = darkMode ? '#e4e4e7' : '#1a1a2e'
-  }}
-  onMouseLeave={(e) => {
-    e.target.style.opacity = '0.6'
-    e.target.style.color = darkMode ? '#6b7280' : '#9ca3af'
-  }}
->
-  ⚙️ Admin
-</span>
+      {/* Center Navigation Links */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.75rem',
+        flexWrap: 'wrap'
+      }}>
+        {/* AI Assistant Link */}
+        <span
+          onClick={() => window.location.href = '/assistant'}
+          style={{
+            padding: '0.5rem 1.25rem',
+            background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+            color: 'white',
+            borderRadius: '10px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '14px',
+            transition: 'all 0.2s ease',
+            boxShadow: '0 2px 8px rgba(139, 92, 246, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.transform = 'scale(1.05)'
+            e.target.style.boxShadow = '0 4px 16px rgba(139, 92, 246, 0.35)'
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.transform = 'scale(1)'
+            e.target.style.boxShadow = '0 2px 8px rgba(139, 92, 246, 0.25)'
+          }}
+        >
+          🤖 Assistant
+        </span>
+
+        {/* Admin Link */}
+        <span
+          onClick={() => window.location.href = '/admin'}
+          style={{
+            fontSize: '12px',
+            color: darkMode ? '#6b7280' : '#9ca3af',
+            cursor: 'pointer',
+            opacity: 0.6,
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.opacity = '1'
+            e.target.style.color = darkMode ? '#e4e4e7' : '#1a1a2e'
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.opacity = '0.6'
+            e.target.style.color = darkMode ? '#6b7280' : '#9ca3af'
+          }}
+        >
+          ⚙️ Admin
+        </span>
+      </div>
 
       {/* Right Side */}
       <div style={{ 
