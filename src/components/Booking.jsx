@@ -24,25 +24,25 @@ function Booking({ user, packageId, onBookingSuccess }) {
     }
   }, [packageId])
 
-  // ✅ Fetch package details
+  // Fetch package details
   const fetchPackageDetails = async () => {
     try {
       const { data, error } = await supabase
         .from('tour_packages')
-        .select('id, name, max_guests')
+        .select('id, name, max_capacity')
         .eq('id', packageId)
         .single()
 
       if (error) throw error
 
       setPackageName(data.name)
-      setMaxGuests(data.max_guests || 10)
+      setMaxGuests(data.max_capacity || 10)
     } catch (error) {
       console.error('❌ Error fetching package:', error)
     }
   }
 
-  // ✅ Fetch available dates and calculate remaining slots
+  // Fetch available dates and calculate remaining slots
   const fetchAvailableDates = async () => {
     try {
       const today = new Date().toISOString().split('T')[0]
@@ -62,7 +62,7 @@ function Booking({ user, packageId, onBookingSuccess }) {
         return
       }
 
-      // ✅ Calculate remaining slots for each date
+      // Calculate remaining slots for each date
       const formattedDates = data?.map(item => {
         const remaining = (item.slots || 0) - (item.booked || 0)
         return {
@@ -77,12 +77,12 @@ function Booking({ user, packageId, onBookingSuccess }) {
       
       setAvailableDates(formattedDates)
 
-      // ✅ Calculate total remaining slots, CAPPED at max_guests
+      // Calculate total remaining slots, CAPPED at max_capacity
       const total = formattedDates.reduce((sum, d) => sum + d.remainingSlots, 0)
-      const cappedTotal = Math.min(total, maxGuests)  // ✅ Cap at package capacity
+      const cappedTotal = Math.min(total, maxGuests)
       
       console.log('📊 Total slots:', total)
-      console.log('📊 Capped at max_guests:', cappedTotal)
+      console.log('📊 Capped at max_capacity:', cappedTotal)
       
       setTotalRemainingSlots(cappedTotal)
 
@@ -91,7 +91,7 @@ function Booking({ user, packageId, onBookingSuccess }) {
     }
   }
 
-  // ✅ Get available dates with slots
+  // Get available dates with slots
   const getAvailableDatesWithSlots = () => {
     const today = new Date().toISOString().split('T')[0]
     return availableDates
@@ -99,7 +99,7 @@ function Booking({ user, packageId, onBookingSuccess }) {
       .filter(item => item.remainingSlots > 0)
   }
 
-  // ✅ Get fully booked dates
+  // Get fully booked dates
   const getFullyBookedDates = () => {
     const today = new Date().toISOString().split('T')[0]
     return availableDates
@@ -108,14 +108,14 @@ function Booking({ user, packageId, onBookingSuccess }) {
       .map(item => item.date)
   }
 
-  // ✅ Get remaining slots for a specific date
+  // Get remaining slots for a specific date
   const getDateRemainingSlots = (date) => {
     const availability = availableDates.find(a => a.date === date)
     if (!availability) return 0
     return availability.remainingSlots > 0 ? availability.remainingSlots : 0
   }
 
-  // ✅ Check if user already has booking for this date
+  // Check if user already has booking for this date
   const userHasBookingOnDate = async (userId, date) => {
     const { data, error } = await supabase
       .from('tour_bookings')
@@ -149,14 +149,13 @@ function Booking({ user, packageId, onBookingSuccess }) {
 
       const userId = currentUser.id
 
-      // ✅ Validate date
+      // Validate date
       if (!booking.booking_date) {
         setMessage('❌ Please select a booking date')
         setLoading(false)
         return
       }
 
-      // ✅ Check if date is in the past
       const today = new Date().toISOString().split('T')[0]
       if (booking.booking_date < today) {
         setMessage('❌ Cannot book past dates. Please select a future date.')
@@ -164,7 +163,6 @@ function Booking({ user, packageId, onBookingSuccess }) {
         return
       }
 
-      // ✅ Check if date exists in available dates
       const dateData = availableDates.find(a => a.date === booking.booking_date)
       if (!dateData) {
         setMessage('❌ This date is not available for booking.')
@@ -172,7 +170,6 @@ function Booking({ user, packageId, onBookingSuccess }) {
         return
       }
 
-      // ✅ Check date availability
       const dateSlots = dateData.remainingSlots
       
       console.log('🔍 Date:', booking.booking_date)
@@ -190,7 +187,7 @@ function Booking({ user, packageId, onBookingSuccess }) {
         return
       }
 
-      // ✅ Check if user already booked this date
+      // Check if user already booked this date
       const hasExistingBooking = await userHasBookingOnDate(userId, booking.booking_date)
       if (hasExistingBooking) {
         setMessage('❌ You already have a booking for this date.')
@@ -240,15 +237,29 @@ function Booking({ user, packageId, onBookingSuccess }) {
       }
 
       // ✅ Update tour_packages current_bookings
-      const { error: updatePackageError } = await supabase
-        .from('tour_packages')
-        .update({ 
-          current_bookings: supabase.raw('current_bookings + ?', [booking.guests])
-        })
-        .eq('id', packageId)
+      try {
+        const { data: packageData, error: fetchError } = await supabase
+          .from('tour_packages')
+          .select('current_bookings')
+          .eq('id', packageId)
+          .single()
 
-      if (updatePackageError) {
-        console.error('❌ Update package error:', updatePackageError)
+        if (fetchError) {
+          console.error('❌ Error fetching package:', fetchError)
+        } else {
+          const newCurrentBookings = (packageData?.current_bookings || 0) + booking.guests
+          
+          const { error: updatePackageError } = await supabase
+            .from('tour_packages')
+            .update({ current_bookings: newCurrentBookings })
+            .eq('id', packageId)
+
+          if (updatePackageError) {
+            console.error('❌ Update package error:', updatePackageError)
+          }
+        }
+      } catch (packageError) {
+        console.error('❌ Package update error:', packageError)
       }
 
       setBookingData(data?.[0])
@@ -409,7 +420,7 @@ function Booking({ user, packageId, onBookingSuccess }) {
         </div>
       ) : (
         <>
-          {/* ✅ Capacity Indicator - Shows CAPPED slots */}
+          {/* Capacity Indicator */}
           <div style={{ marginBottom: '1rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#6b7280', marginBottom: '0.25rem' }}>
               <span>Available Slots</span>

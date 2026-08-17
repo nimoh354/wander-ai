@@ -13,13 +13,15 @@ function TourPackages({ user }) {
     description: '',
     price: '',
     duration_days: 1,
-    max_guests: 10,  // ✅ Changed from max_capacity
+    max_capacity: 10,
     includes: '',
     excludes: '',
     status: 'active',
     image_url: '',
     start_date: '',
     end_date: '',
+    available_from: '',
+    available_to: '',
     season: ''
   })
 
@@ -27,6 +29,7 @@ function TourPackages({ user }) {
     fetchPackages()
   }, [])
 
+  // ✅ Fetch packages with status logic
   const fetchPackages = async () => {
     setLoading(true)
     
@@ -54,8 +57,16 @@ function TourPackages({ user }) {
       .order('created_at', { ascending: false })
 
     if (!error) {
+      const today = new Date().toISOString().split('T')[0]
+      
       const processedPackages = (data || []).map(pkg => {
-        const today = new Date().toISOString().split('T')[0]
+        const endDate = pkg.end_date
+        const startDate = pkg.start_date
+        const hasEndDate = endDate && endDate !== ''
+        const hasStartDate = startDate && startDate !== ''
+        const isDateExpired = hasEndDate && endDate < today
+        const isDateComingSoon = hasStartDate && startDate > today
+        
         const availabilityDates = pkg.availability || []
         const futureDates = availabilityDates.filter(a => a.date >= today)
         const hasFutureDates = futureDates.length > 0
@@ -64,18 +75,38 @@ function TourPackages({ user }) {
         let packageStatus = pkg.status || 'active'
         let statusBadge = ''
         let isExpired = false
+        let isComingSoon = false
         let isFullyBooked = false
+        let isNoDates = false
+        let statusMessage = ''
         
         if (packageStatus === 'inactive') {
           statusBadge = '⛔ Inactive'
-        } else if (!hasFutureDates) {
           isExpired = true
+          statusMessage = 'Package is inactive'
+        } else if (isDateExpired) {
           statusBadge = '⛔ Expired'
+          isExpired = true
+          statusMessage = `Expired on ${new Date(endDate).toLocaleDateString()}`
+        } else if (isDateComingSoon) {
+          statusBadge = '📅 Coming Soon'
+          isComingSoon = true
+          statusMessage = `Available from ${new Date(startDate).toLocaleDateString()}`
+        } else if (!hasFutureDates && availabilityDates.length === 0) {
+          statusBadge = '📅 No Dates'
+          isNoDates = true
+          statusMessage = 'No dates set'
+        } else if (!hasFutureDates && availabilityDates.length > 0) {
+          statusBadge = '⛔ Expired'
+          isExpired = true
+          statusMessage = 'No future dates available'
         } else if (!hasAvailableSlots) {
           isFullyBooked = true
           statusBadge = '🔴 Full'
+          statusMessage = 'All dates fully booked'
         } else {
           statusBadge = '✅ Available'
+          statusMessage = `${futureDates.length} dates available`
         }
         
         return {
@@ -83,8 +114,11 @@ function TourPackages({ user }) {
           hasFutureDates,
           hasAvailableSlots,
           isExpired,
+          isComingSoon,
           isFullyBooked,
+          isNoDates,
           statusBadge,
+          statusMessage,
           futureDates: futureDates.map(d => ({
             date: d.date,
             slots: d.slots - d.booked
@@ -99,6 +133,7 @@ function TourPackages({ user }) {
     setLoading(false)
   }
 
+  // ✅ Upload image to Supabase Storage
   const uploadImage = async (file) => {
     setUploadingImage(true)
     try {
@@ -125,6 +160,7 @@ function TourPackages({ user }) {
     }
   }
 
+  // ✅ Get image URL with fallback
   const getImageUrl = (pkg) => {
     if (pkg.image_url) return pkg.image_url
     
@@ -144,12 +180,18 @@ function TourPackages({ user }) {
     return 'https://images.unsplash.com/photo-1488085061387-422e29b40080?w=600&h=400&fit=crop'
   }
 
+  // ✅ Generate availability dates
   const generateAvailability = async (packageId, startDate, endDate, slots = 10) => {
-    if (!startDate || !endDate) return
+    if (!startDate || !endDate) return false
     
     const dates = []
     const start = new Date(startDate)
     const end = new Date(endDate)
+    
+    if (start > end) {
+      console.error('❌ Start date is after end date')
+      return false
+    }
     
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       dates.push({
@@ -161,6 +203,11 @@ function TourPackages({ user }) {
       })
     }
     
+    if (dates.length === 0) {
+      console.error('❌ No dates to generate')
+      return false
+    }
+    
     const { error } = await supabase
       .from('availability')
       .insert(dates)
@@ -170,10 +217,11 @@ function TourPackages({ user }) {
       return false
     }
     
-    console.log(`✅ Generated ${dates.length} availability dates`)
+    console.log(`✅ Generated ${dates.length} availability dates from ${startDate} to ${endDate}`)
     return true
   }
 
+  // ✅ Handle form submit (create/update)
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -192,7 +240,7 @@ function TourPackages({ user }) {
       description: formData.description || '',
       price: parseFloat(formData.price) || 0,
       duration_days: parseInt(formData.duration_days) || 1,
-      max_guests: parseInt(formData.max_guests) || 10,  // ✅ Changed
+      max_capacity: parseInt(formData.max_capacity) || 10,
       includes: formData.includes ? formData.includes.split(',').map(item => item.trim()) : [],
       excludes: formData.excludes ? formData.excludes.split(',').map(item => item.trim()) : [],
       status: formData.status || 'active',
@@ -200,6 +248,8 @@ function TourPackages({ user }) {
       image_url: formData.image_url || null,
       start_date: formData.start_date || null,
       end_date: formData.end_date || null,
+      available_from: formData.available_from || null,
+      available_to: formData.available_to || null,
       season: formData.season || null
     }
 
@@ -225,13 +275,16 @@ function TourPackages({ user }) {
     }
 
     if (!error) {
-      if (!editingPackage && formData.start_date && formData.end_date && newPackageId) {
-        await generateAvailability(
+      if (newPackageId && formData.start_date && formData.end_date) {
+        const success = await generateAvailability(
           newPackageId,
           formData.start_date,
           formData.end_date,
-          parseInt(formData.max_guests) || 10  // ✅ Changed
+          parseInt(formData.max_capacity) || 10
         )
+        if (!success) {
+          console.warn('⚠️ Availability generation failed, but package was created')
+        }
       }
       
       fetchPackages()
@@ -246,6 +299,7 @@ function TourPackages({ user }) {
     setLoading(false)
   }
 
+  // ✅ Delete package
   const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this package?')) return
 
@@ -262,23 +316,27 @@ function TourPackages({ user }) {
     }
   }
 
+  // ✅ Reset form
   const resetForm = () => {
     setFormData({
       name: '',
       description: '',
       price: '',
       duration_days: 1,
-      max_guests: 10,  // ✅ Changed
+      max_capacity: 10,
       includes: '',
       excludes: '',
       status: 'active',
       image_url: '',
       start_date: '',
       end_date: '',
+      available_from: '',
+      available_to: '',
       season: ''
     })
   }
 
+  // ✅ Edit package - populate form
   const editPackage = (pkg) => {
     setEditingPackage(pkg)
     setFormData({
@@ -286,13 +344,15 @@ function TourPackages({ user }) {
       description: pkg.description || '',
       price: pkg.price || '',
       duration_days: pkg.duration_days || 1,
-      max_guests: pkg.max_guests || 10,  // ✅ Changed
+      max_capacity: pkg.max_capacity || 10,
       includes: pkg.includes ? pkg.includes.join(', ') : '',
       excludes: pkg.excludes ? pkg.excludes.join(', ') : '',
       status: pkg.status || 'active',
       image_url: pkg.image_url || '',
       start_date: pkg.start_date || '',
       end_date: pkg.end_date || '',
+      available_from: pkg.available_from || '',
+      available_to: pkg.available_to || '',
       season: pkg.season || ''
     })
     setShowForm(true)
@@ -377,62 +437,25 @@ function TourPackages({ user }) {
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem' }}>Duration (days)</label>
+                <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem' }}>Duration (days) *</label>
                 <input
                   type="number"
                   value={formData.duration_days}
                   onChange={(e) => setFormData({ ...formData, duration_days: e.target.value })}
                   min="1"
+                  required
                   style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '8px' }}
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem' }}>Max Guests</label>
+                <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem' }}>Max Capacity</label>
                 <input
                   type="number"
-                  value={formData.max_guests}  // ✅ Changed
-                  onChange={(e) => setFormData({ ...formData, max_guests: e.target.value })}  // ✅ Changed
+                  value={formData.max_capacity}
+                  onChange={(e) => setFormData({ ...formData, max_capacity: e.target.value })}
                   min="1"
                   style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '8px' }}
                 />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem' }}>Start Date</label>
-                <input
-                  type="date"
-                  value={formData.start_date}
-                  onChange={(e) => {
-                    const start = e.target.value
-                    const end = new Date(start)
-                    end.setDate(end.getDate() + (parseInt(formData.duration_days) || 1))
-                    setFormData({ 
-                      ...formData, 
-                      start_date: start,
-                      end_date: end.toISOString().split('T')[0]
-                    })
-                  }}
-                  style={{ width: '100%', padding: '0.5rem', border: '1px solid #ddd', borderRadius: '8px' }}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem' }}>End Date</label>
-                <input
-                  type="date"
-                  value={formData.end_date}
-                  disabled
-                  style={{ 
-                    width: '100%', 
-                    padding: '0.5rem', 
-                    border: '1px solid #e2e8f0', 
-                    borderRadius: '8px',
-                    background: '#f1f5f9',
-                    color: '#64748b',
-                    cursor: 'not-allowed'
-                  }}
-                />
-                <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '0.25rem' }}>
-                  ⚡ Auto-calculated from start date + duration
-                </p>
               </div>
               <div>
                 <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem' }}>Season</label>
@@ -459,6 +482,93 @@ function TourPackages({ user }) {
                   <option value="active">✅ Active</option>
                   <option value="inactive">❌ Inactive</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Date Section */}
+            <div style={{ 
+              display: 'grid', 
+              gap: '1rem', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              marginTop: '1rem',
+              padding: '1rem',
+              background: '#f8fafc',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0'
+            }}>
+              <div>
+                <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem', fontSize: '13px' }}>
+                  📅 Start Date *
+                </label>
+                <input
+                  type="date"
+                  value={formData.start_date}
+                  onChange={(e) => {
+                    const start = e.target.value
+                    const end = new Date(start)
+                    end.setDate(end.getDate() + (parseInt(formData.duration_days) || 1))
+                    setFormData({ 
+                      ...formData, 
+                      start_date: start,
+                      end_date: end.toISOString().split('T')[0]
+                    })
+                  }}
+                  required
+                  style={{ width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '8px' }}
+                />
+                <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '0.2rem' }}>
+                  When package becomes available
+                </p>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem', fontSize: '13px' }}>
+                  📅 End Date
+                </label>
+                <input
+                  type="date"
+                  value={formData.end_date}
+                  disabled
+                  style={{ 
+                    width: '100%', 
+                    padding: '0.6rem', 
+                    border: '1px solid #e2e8f0', 
+                    borderRadius: '8px',
+                    background: '#f1f5f9',
+                    color: '#64748b',
+                    cursor: 'not-allowed'
+                  }}
+                />
+                <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '0.2rem' }}>
+                  ⚡ Auto-calculated from start date + duration
+                </p>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem', fontSize: '13px' }}>
+                  📅 Available From
+                </label>
+                <input
+                  type="date"
+                  value={formData.available_from}
+                  onChange={(e) => setFormData({ ...formData, available_from: e.target.value })}
+                  style={{ width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '8px' }}
+                />
+                <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '0.2rem' }}>
+                  When bookings open
+                </p>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: '600', marginBottom: '0.25rem', fontSize: '13px' }}>
+                  📅 Available To
+                </label>
+                <input
+                  type="date"
+                  value={formData.available_to}
+                  onChange={(e) => setFormData({ ...formData, available_to: e.target.value })}
+                  style={{ width: '100%', padding: '0.6rem', border: '1px solid #ddd', borderRadius: '8px' }}
+                />
+                <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '0.2rem' }}>
+                  When bookings close
+                </p>
               </div>
             </div>
 
@@ -572,7 +682,7 @@ function TourPackages({ user }) {
         </div>
       )}
 
-      {/* Package Cards */}
+      {/* Package Cards - ADMIN VIEW */}
       {packages.length === 0 ? (
         <div style={{
           textAlign: 'center',
@@ -590,109 +700,175 @@ function TourPackages({ user }) {
           gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
           gap: '1rem'
         }}>
-          {packages.map((pkg) => (
-            <div key={pkg.id} style={{
-              background: 'white',
-              borderRadius: '16px',
-              border: '1px solid rgba(26, 43, 60, 0.06)',
-              overflow: 'hidden',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-              transition: 'all 0.2s ease'
-            }}>
-              {/* Image Display */}
-              <div style={{
-                height: '140px',
-                background: `url(${getImageUrl(pkg)})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                position: 'relative'
+          {packages.map((pkg) => {
+            const isExpired = pkg.isExpired
+            const isComingSoon = pkg.isComingSoon
+            const isFullyBooked = pkg.isFullyBooked
+            const isNoDates = pkg.isNoDates
+            
+            return (
+              <div key={pkg.id} style={{
+                background: 'white',
+                borderRadius: '16px',
+                border: `1px solid ${
+                  isExpired ? '#fca5a5' 
+                  : isComingSoon ? '#fcd34d' 
+                  : isNoDates ? '#e5e7eb'
+                  : isFullyBooked ? '#fde68a'
+                  : 'rgba(26, 43, 60, 0.06)'
+                }`,
+                overflow: 'hidden',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                transition: 'all 0.2s ease',
+                opacity: isExpired ? 0.7 : 1
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-4px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.1)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)'
               }}>
-                <span style={{
-                  position: 'absolute',
-                  bottom: '8px',
-                  right: '8px',
-                  padding: '0.3rem 0.8rem',
-                  borderRadius: '20px',
-                  fontSize: '11px',
-                  fontWeight: '600',
-                  background: pkg.isExpired ? 'rgba(239,68,68,0.9)' 
-                    : pkg.isFullyBooked ? 'rgba(245,158,11,0.9)' 
-                    : 'rgba(34,197,94,0.9)',
-                  color: 'white',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                {/* Image Display */}
+                <div style={{
+                  height: '140px',
+                  background: `url(${getImageUrl(pkg)})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  position: 'relative'
                 }}>
-                  {pkg.isExpired ? '⛔ Expired' 
-                    : pkg.isFullyBooked ? '🔴 Full' 
-                    : '✅ Available'}
-                </span>
-              </div>
-              <div style={{ padding: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                  <h4 style={{ fontSize: '16px', fontWeight: '600' }}>{pkg.name}</h4>
-                  <div style={{ display: 'flex', gap: '0.25rem' }}>
-                    <button
-                      onClick={() => editPackage(pkg)}
-                      style={{
-                        padding: '0.25rem 0.5rem',
-                        background: '#f3f4f6',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      onClick={() => handleDelete(pkg.id)}
-                      style={{
-                        padding: '0.25rem 0.5rem',
-                        background: '#fef2f2',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        color: '#ef4444'
-                      }}
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                </div>
-                <p style={{ fontSize: '13px', color: '#6b7280', margin: '0.25rem 0' }}>
-                  {pkg.description || 'No description'}
-                </p>
-                <div style={{ display: 'flex', gap: '1rem', fontSize: '13px', color: '#6b7280' }}>
-                  <span>💰 ${pkg.price}</span>
-                  <span>📅 {pkg.duration_days} days</span>
-                  <span>👥 {pkg.max_guests} guests</span>  {/* ✅ Changed */}
-                </div>
-                {pkg.season && (
                   <span style={{
+                    position: 'absolute',
+                    bottom: '8px',
+                    right: '8px',
+                    padding: '0.3rem 0.8rem',
+                    borderRadius: '20px',
                     fontSize: '11px',
-                    padding: '0.15rem 0.5rem',
-                    borderRadius: '12px',
-                    background: '#fef3c7',
-                    color: '#d97706',
-                    display: 'inline-block',
-                    marginTop: '0.25rem'
+                    fontWeight: '600',
+                    background: isExpired ? 'rgba(239,68,68,0.9)' 
+                      : isComingSoon ? 'rgba(245,158,11,0.9)'
+                      : isFullyBooked ? 'rgba(245,158,11,0.9)' 
+                      : isNoDates ? 'rgba(107,114,128,0.9)'
+                      : 'rgba(34,197,94,0.9)',
+                    color: 'white',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                   }}>
-                    🌤️ {pkg.season}
+                    {pkg.statusBadge || 'Available'}
                   </span>
-                )}
-                {pkg.futureDates && pkg.futureDates.length > 0 && (
+                  {pkg.season && (
+                    <span style={{
+                      position: 'absolute',
+                      top: '8px',
+                      left: '8px',
+                      padding: '0.2rem 0.6rem',
+                      borderRadius: '12px',
+                      fontSize: '10px',
+                      fontWeight: '500',
+                      background: 'rgba(0,0,0,0.6)',
+                      color: 'white',
+                      backdropFilter: 'blur(4px)'
+                    }}>
+                      🌤️ {pkg.season}
+                    </span>
+                  )}
+                </div>
+                <div style={{ padding: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                    <h4 style={{ 
+                      fontSize: '16px', 
+                      fontWeight: '600',
+                      textDecoration: isExpired ? 'line-through' : 'none',
+                      color: isExpired ? '#9ca3af' : '#1a1a2e'
+                    }}>
+                      {pkg.name}
+                    </h4>
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                      <button
+                        onClick={() => editPackage(pkg)}
+                        style={{
+                          padding: '0.25rem 0.5rem',
+                          background: '#f3f4f6',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => handleDelete(pkg.id)}
+                        style={{
+                          padding: '0.25rem 0.5rem',
+                          background: '#fef2f2',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          color: '#ef4444'
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: '13px', color: '#6b7280', margin: '0.25rem 0' }}>
+                    {pkg.description || 'No description'}
+                  </p>
+                  <div style={{ display: 'flex', gap: '1rem', fontSize: '13px', color: '#6b7280' }}>
+                    <span>💰 ${pkg.price}</span>
+                    <span>📅 {pkg.duration_days} days</span>
+                    <span>👥 {pkg.max_capacity} guests</span>
+                  </div>
+                  
+                  {/* Date info */}
                   <div style={{ 
                     fontSize: '11px', 
                     color: '#6b7280', 
-                    marginTop: '0.25rem',
+                    marginTop: '0.5rem',
                     padding: '0.25rem 0.5rem',
                     background: '#f3f4f6',
                     borderRadius: '4px'
                   }}>
-                    📅 {pkg.futureDates.length} future dates available
+                    {pkg.start_date && (
+                      <span>📅 Start: {new Date(pkg.start_date).toLocaleDateString()}</span>
+                    )}
+                    {pkg.end_date && (
+                      <span style={{ marginLeft: '0.5rem' }}>
+                        ⏳ End: {new Date(pkg.end_date).toLocaleDateString()}
+                      </span>
+                    )}
+                    {!pkg.start_date && !pkg.end_date && (
+                      <span>📅 No dates set</span>
+                    )}
                   </div>
-                )}
+                  
+                  {pkg.futureDates && pkg.futureDates.length > 0 && (
+                    <div style={{ 
+                      fontSize: '11px', 
+                      color: '#6b7280', 
+                      marginTop: '0.25rem',
+                      padding: '0.25rem 0.5rem',
+                      background: '#f3f4f6',
+                      borderRadius: '4px'
+                    }}>
+                      📅 {pkg.futureDates.length} future dates available
+                    </div>
+                  )}
+                  
+                  {pkg.statusMessage && (
+                    <div style={{ 
+                      fontSize: '11px', 
+                      color: isExpired ? '#ef4444' : isComingSoon ? '#f59e0b' : '#6b7280',
+                      marginTop: '0.25rem',
+                      fontWeight: '500'
+                    }}>
+                      {pkg.statusMessage}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

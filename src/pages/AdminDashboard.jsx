@@ -165,7 +165,7 @@ function AdminDashboard({ user, onLogout }) {
 
       console.log('📊 Stats:', { usersCount, bookingsCount, packagesCount, pendingCount, reviewsCount })
 
-      // Fetch bookings (without joins)
+      // Fetch bookings
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('tour_bookings')
         .select('*')
@@ -177,7 +177,6 @@ function AdminDashboard({ user, onLogout }) {
       } else {
         console.log('✅ Bookings fetched:', bookingsData?.length || 0)
         
-        // Enrich bookings with user and package data (fetch separately)
         const enrichedBookings = await Promise.all(
           (bookingsData || []).map(async (booking) => {
             const [userResult, packageResult] = await Promise.all([
@@ -208,7 +207,7 @@ function AdminDashboard({ user, onLogout }) {
         console.error('❌ Error fetching users:', usersError)
       }
 
-      // Fetch reviews (without joins)
+      // Fetch reviews
       const { data: reviewsData, error: reviewsError } = await supabase
         .from('trip_reviews')
         .select('*')
@@ -218,7 +217,6 @@ function AdminDashboard({ user, onLogout }) {
       if (reviewsError) {
         console.error('❌ Error fetching reviews:', reviewsError)
       } else {
-        // Enrich reviews with user data
         const enrichedReviews = await Promise.all(
           (reviewsData || []).map(async (review) => {
             const userResult = await supabase
@@ -236,7 +234,7 @@ function AdminDashboard({ user, onLogout }) {
         setRecentReviews(enrichedReviews)
       }
 
-      // Fetch all packages
+      // ✅ FIXED: Fetch and process packages with status calculation
       const { data: packagesData, error: packagesError } = await supabase
         .from('tour_packages')
         .select('*')
@@ -245,6 +243,49 @@ function AdminDashboard({ user, onLogout }) {
       if (packagesError) {
         console.error('❌ Error fetching packages:', packagesError)
       }
+
+      // ✅ Calculate package statuses (same logic as TourPackages.jsx)
+      const today = new Date().toISOString().split('T')[0]
+      const processedPackages = (packagesData || []).map(pkg => {
+        const endDate = pkg.end_date
+        const startDate = pkg.start_date
+        const hasEndDate = endDate && endDate !== ''
+        const hasStartDate = startDate && startDate !== ''
+        
+        // ✅ String comparison works for YYYY-MM-DD
+        const isDateExpired = hasEndDate && endDate < today
+        const isDateComingSoon = hasStartDate && startDate > today
+        
+        let statusBadge = ''
+        let isExpired = false
+        let isComingSoon = false
+        let isActive = false
+        
+        if (pkg.status === 'inactive') {
+          statusBadge = '⛔ Inactive'
+          isExpired = true
+        } else if (isDateExpired) {
+          statusBadge = '⛔ Expired'
+          isExpired = true
+        } else if (isDateComingSoon) {
+          statusBadge = '📅 Coming Soon'
+          isComingSoon = true
+        } else {
+          statusBadge = '✅ Available'
+          isActive = true
+        }
+        
+        return {
+          ...pkg,
+          isExpired,
+          isComingSoon,
+          isActive,
+          statusBadge,
+          statusDisplay: statusBadge
+        }
+      })
+
+      setPackages(processedPackages)
 
       // Calculate revenue
       const { data: revenueData, error: revenueError } = await supabase
@@ -269,12 +310,10 @@ function AdminDashboard({ user, onLogout }) {
         growthRate: 12.5
       })
 
-      // Set remaining states
       setRecentUsers(usersData || [])
-      setPackages(packagesData || [])
       setUsers(usersData || [])
 
-      console.log('✅ Bookings set in state:', bookingsData?.length || 0)
+      console.log('✅ Packages processed:', processedPackages.length)
 
     } catch (error) {
       console.error('❌ Error fetching dashboard data:', error)
@@ -1154,100 +1193,121 @@ function AdminDashboard({ user, onLogout }) {
                   gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
                   gap: '1rem'
                 }}>
-                  {packages.map((pkg) => (
-                    <div
-                      key={pkg.id}
-                      style={{
-                        padding: '1rem',
-                        borderRadius: '12px',
-                        border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(26,43,60,0.06)'}`,
-                        background: darkMode ? '#0f0f1a' : '#f9fafb',
-                        position: 'relative'
-                      }}
-                    >
-                      {/* ✅ Expiry Badge */}
-                      {pkg.is_expired && (
-                        <span style={{
-                          position: 'absolute',
-                          top: '8px',
-                          left: '8px',
-                          padding: '0.2rem 0.6rem',
-                          borderRadius: '4px',
-                          background: 'rgba(239, 68, 68, 0.9)',
-                          color: 'white',
-                          fontSize: '10px',
-                          fontWeight: 'bold',
-                          zIndex: 1
-                        }}>
-                          ⛔ EXPIRED
-                        </span>
-                      )}
-                      
-                      {pkg.image_url && (
-                        <img 
-                          src={pkg.image_url} 
-                          alt={pkg.name}
-                          style={{
-                            width: '100%',
-                            height: '150px',
-                            objectFit: 'cover',
-                            borderRadius: '8px',
-                            marginBottom: '0.75rem'
-                          }}
-                        />
-                      )}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                        <h4 style={{ fontSize: '15px', fontWeight: '600' }}>{pkg.name}</h4>
-                        {/* ✅ Updated Status Display */}
-                        <span style={{
-                          padding: '0.15rem 0.5rem',
+                  {packages.map((pkg) => {
+                    const isExpired = pkg.isExpired
+                    const isComingSoon = pkg.isComingSoon
+                    
+                    return (
+                      <div
+                        key={pkg.id}
+                        style={{
+                          padding: '1rem',
                           borderRadius: '12px',
-                          fontSize: '10px',
-                          background: pkg.is_expired ? '#fef2f2' : (pkg.status === 'active' ? '#f0fdf4' : '#fef2f2'),
-                          color: pkg.is_expired ? '#ef4444' : (pkg.status === 'active' ? '#22c55e' : '#ef4444')
+                          border: `1px solid ${
+                            isExpired ? '#fca5a5' 
+                            : isComingSoon ? '#fcd34d' 
+                            : darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(26,43,60,0.06)'
+                          }`,
+                          background: darkMode ? '#0f0f1a' : '#f9fafb',
+                          position: 'relative',
+                          opacity: isExpired ? 0.7 : 1
+                        }}
+                      >
+                        {pkg.image_url && (
+                          <img 
+                            src={pkg.image_url} 
+                            alt={pkg.name}
+                            style={{
+                              width: '100%',
+                              height: '150px',
+                              objectFit: 'cover',
+                              borderRadius: '8px',
+                              marginBottom: '0.75rem'
+                            }}
+                          />
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                          <h4 style={{ 
+                            fontSize: '15px', 
+                            fontWeight: '600',
+                            textDecoration: isExpired ? 'line-through' : 'none',
+                            color: isExpired ? '#9ca3af' : '#1a1a2e'
+                          }}>
+                            {pkg.name}
+                          </h4>
+                          <span style={{
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: '12px',
+                            fontSize: '10px',
+                            background: isExpired ? '#fef2f2' : isComingSoon ? '#fef3c7' : '#f0fdf4',
+                            color: isExpired ? '#ef4444' : isComingSoon ? '#d97706' : '#22c55e'
+                          }}>
+                            {pkg.statusBadge || 'Available'}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: '13px', color: darkMode ? '#a1a1aa' : '#6b7280', margin: '0.5rem 0' }}>
+                          {pkg.description || 'No description'}
+                        </p>
+                        <div style={{ display: 'flex', gap: '1rem', fontSize: '13px' }}>
+                          <span>💰 ${pkg.price}</span>
+                          <span>📅 {pkg.duration_days} days</span>
+                          <span>👥 {pkg.max_capacity} guests</span>
+                        </div>
+                        
+                        {/* ✅ Show date info */}
+                        <div style={{ 
+                          fontSize: '11px', 
+                          color: '#6b7280', 
+                          marginTop: '0.5rem',
+                          padding: '0.25rem 0.5rem',
+                          background: '#f3f4f6',
+                          borderRadius: '4px'
                         }}>
-                          {pkg.is_expired ? '⛔ Expired' : (pkg.status || 'active')}
-                        </span>
+                          {pkg.start_date && (
+                            <span>📅 Start: {new Date(pkg.start_date).toLocaleDateString()}</span>
+                          )}
+                          {pkg.end_date && (
+                            <span style={{ marginLeft: '0.5rem' }}>
+                              ⏳ End: {new Date(pkg.end_date).toLocaleDateString()}
+                            </span>
+                          )}
+                          {!pkg.start_date && !pkg.end_date && (
+                            <span>📅 No dates set</span>
+                          )}
+                        </div>
+                        
+                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+                          <button
+                            onClick={() => handleEditPackage(pkg)}
+                            style={{
+                              padding: '0.25rem 0.75rem',
+                              background: darkMode ? '#2d2d44' : '#f3f4f6',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            <Edit size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePackage(pkg.id)}
+                            style={{
+                              padding: '0.25rem 0.75rem',
+                              background: '#fef2f2',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              color: '#ef4444',
+                              fontSize: '12px'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
-                      <p style={{ fontSize: '13px', color: darkMode ? '#a1a1aa' : '#6b7280', margin: '0.5rem 0' }}>
-                        {pkg.description || 'No description'}
-                      </p>
-                      <div style={{ display: 'flex', gap: '1rem', fontSize: '13px' }}>
-                        <span>💰 ${pkg.price}</span>
-                        <span>📅 {pkg.duration_days} days</span>
-                        <span>👥 {pkg.max_capacity} guests</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-                        <button
-                          onClick={() => handleEditPackage(pkg)}
-                          style={{
-                            padding: '0.25rem 0.75rem',
-                            background: darkMode ? '#2d2d44' : '#f3f4f6',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '12px'
-                          }}
-                        >
-                          <Edit size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleDeletePackage(pkg.id)}
-                          style={{
-                            padding: '0.25rem 0.75rem',
-                            background: '#fef2f2',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            color: '#ef4444',
-                            fontSize: '12px'
-                          }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
@@ -1391,7 +1451,6 @@ function AdminDashboard({ user, onLogout }) {
                           style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', border: '1px solid #d1d5db' }}
                         />
                       </div>
-                      {/* ✅ Image Upload Section */}
                       <div style={{ gridColumn: '1 / -1' }}>
                         <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: '600' }}>
                           Package Image

@@ -12,63 +12,68 @@ function UserTourPackages({ user }) {
     fetchPackages()
   }, [])
 
-  // ✅ Get package status
+  // ✅ FIXED: Same status logic as admin
   const getPackageStatus = (pkg) => {
     const today = new Date().toISOString().split('T')[0]
     
-    // ✅ Check if Coming Soon
-    if (pkg.coming_soon_date && pkg.coming_soon_date > today) {
+    // ✅ Check if status is inactive
+    if (pkg.status === 'inactive') {
       return {
-        type: 'coming_soon',
-        label: '⏳ Coming Soon',
-        color: '#f59e0b',
-        message: `Available from ${new Date(pkg.coming_soon_date).toLocaleDateString()}`
+        type: 'inactive',
+        label: '⛔ Inactive',
+        color: '#6b7280',
+        message: 'Currently unavailable'
       }
     }
     
-    // ✅ Check if Expired
-    if (pkg.expires_at) {
-      const expires = new Date(pkg.expires_at)
-      const now = new Date()
-      if (expires < now) {
-        return {
-          type: 'expired',
-          label: '⛔ Expired',
-          color: '#ef4444',
-          message: 'No longer available'
-        }
-      }
-      
-      // ✅ Countdown for expiring soon
-      const diffTime = expires - now
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-      
-      if (diffDays <= 7) {
-        return {
-          type: 'expiring_soon',
-          label: `⏰ Expires in ${diffDays} days`,
-          color: '#f59e0b',
-          message: `Expires ${expires.toLocaleDateString()}`
-        }
-      }
-      
-      return {
-        type: 'available',
-        label: '✅ Available',
-        color: '#22c55e',
-        message: `${diffDays} days remaining`
-      }
-    }
+    // ✅ Check end_date for expiration (SAME AS ADMIN)
+    const endDate = pkg.end_date
+    const hasEndDate = endDate && endDate !== ''
+    const isDateExpired = hasEndDate && endDate < today
     
-    // ✅ Check if has future availability
-    const hasFuture = pkg.futureDates && pkg.futureDates.length > 0
-    
-    if (!hasFuture) {
+    if (isDateExpired) {
       return {
         type: 'expired',
         label: '⛔ Expired',
         color: '#ef4444',
+        message: 'No longer available'
+      }
+    }
+    
+    // ✅ Check start_date for "Coming Soon" (SAME AS ADMIN)
+    const startDate = pkg.start_date
+    const hasStartDate = startDate && startDate !== ''
+    const isDateComingSoon = hasStartDate && startDate > today
+    
+    if (isDateComingSoon) {
+      return {
+        type: 'coming_soon',
+        label: '📅 Coming Soon',
+        color: '#f59e0b',
+        message: `Available from ${new Date(startDate).toLocaleDateString()}`
+      }
+    }
+    
+    // ✅ Check availability
+    const hasFuture = pkg.futureDates && pkg.futureDates.length > 0
+    
+    if (!hasFuture) {
+      return {
+        type: 'no_dates',
+        label: '📅 No Dates',
+        color: '#6b7280',
         message: 'No future dates available'
+      }
+    }
+    
+    // ✅ Check if fully booked
+    const hasSlots = pkg.futureDates.some(d => d.slots > 0)
+    if (!hasSlots) {
+      return {
+        type: 'full',
+        label: '🔴 Full',
+        color: '#f59e0b',
+        message: 'All dates fully booked'
       }
     }
     
@@ -108,18 +113,19 @@ function UserTourPackages({ user }) {
         return
       }
 
-      // ✅ Process packages
       const processedPackages = (data || []).map(pkg => {
-        const futureDates = pkg.availability?.filter(a => a.date >= today) || []
-        const hasFutureDates = futureDates.length > 0
+        // ✅ Calculate future dates
+        const futureDates = (pkg.availability || [])
+          .filter(a => a.date >= today)
+          .map(d => ({
+            date: d.date,
+            slots: d.slots - d.booked
+          }))
         
         return {
           ...pkg,
-          hasFutureDates,
-          futureDates: futureDates.map(d => ({
-            date: d.date,
-            slots: d.slots - d.booked
-          })),
+          futureDates,
+          hasFutureDates: futureDates.length > 0,
           statusInfo: getPackageStatus({
             ...pkg,
             futureDates
@@ -138,7 +144,6 @@ function UserTourPackages({ user }) {
     }
   }
 
-  // ✅ Helper function for image URL with fallback
   const getImageUrl = (pkg) => {
     if (pkg.image_url) return pkg.image_url
     
@@ -232,18 +237,27 @@ function UserTourPackages({ user }) {
           {packages.map((pkg) => {
             const status = pkg.statusInfo
             const isExpired = status?.type === 'expired'
+            const isInactive = status?.type === 'inactive'
             const isComingSoon = status?.type === 'coming_soon'
-            const isExpiringSoon = status?.type === 'expiring_soon'
+            const isNoDates = status?.type === 'no_dates'
+            const isFull = status?.type === 'full'
+            const isAvailable = status?.type === 'available'
             
             return (
               <div key={pkg.id} style={{
                 background: 'white',
                 borderRadius: '16px',
-                border: `1px solid ${isExpired ? '#fca5a5' : isComingSoon ? '#fcd34d' : 'rgba(26, 43, 60, 0.06)'}`,
+                border: `1px solid ${
+                  isExpired || isInactive ? '#fca5a5' 
+                  : isComingSoon ? '#fcd34d' 
+                  : isNoDates ? '#e5e7eb'
+                  : isFull ? '#fde68a'
+                  : 'rgba(26, 43, 60, 0.06)'
+                }`,
                 boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
                 transition: 'all 0.2s ease',
                 overflow: 'hidden',
-                opacity: isExpired ? 0.7 : 1
+                opacity: (isExpired || isInactive) ? 0.7 : 1
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
@@ -261,7 +275,7 @@ function UserTourPackages({ user }) {
                   backgroundPosition: 'center',
                   position: 'relative'
                 }}>
-                  {/* ✅ Status Badge - Main */}
+                  {/* Status Badge */}
                   <span style={{
                     position: 'absolute',
                     top: '12px',
@@ -278,7 +292,7 @@ function UserTourPackages({ user }) {
                     {status?.label || 'Available'}
                   </span>
                   
-                  {/* ✅ Status Message */}
+                  {/* Status Message */}
                   <span style={{
                     position: 'absolute',
                     bottom: '12px',
@@ -315,8 +329,8 @@ function UserTourPackages({ user }) {
                     <h4 style={{ 
                       fontSize: '18px', 
                       fontWeight: '600',
-                      textDecoration: isExpired ? 'line-through' : 'none',
-                      color: isExpired ? '#9ca3af' : '#1a1a2e'
+                      textDecoration: (isExpired || isInactive) ? 'line-through' : 'none',
+                      color: (isExpired || isInactive) ? '#9ca3af' : '#1a1a2e'
                     }}>
                       {pkg.name}
                     </h4>
@@ -332,7 +346,7 @@ function UserTourPackages({ user }) {
                   </div>
                   <p style={{ 
                     fontSize: '14px', 
-                    color: isExpired ? '#9ca3af' : '#6b7280',
+                    color: (isExpired || isInactive) ? '#9ca3af' : '#6b7280',
                     marginBottom: '0.5rem'
                   }}>
                     {pkg.description || 'No description'}
@@ -341,21 +355,58 @@ function UserTourPackages({ user }) {
                     display: 'flex',
                     gap: '1rem',
                     fontSize: '14px',
-                    color: isExpired ? '#9ca3af' : '#6b7280',
+                    color: (isExpired || isInactive) ? '#9ca3af' : '#6b7280',
                     flexWrap: 'wrap',
                     marginBottom: '0.5rem'
                   }}>
                     <span>💰 ${pkg.price}</span>
                     <span>📅 {pkg.duration_days} days</span>
-                    <span>👥 {pkg.max_guests} guests</span>
+                    <span>👥 {pkg.max_capacity} guests</span>
                   </div>
                   {pkg.includes && pkg.includes.length > 0 && (
-                    <div style={{ fontSize: '12px', color: isExpired ? '#9ca3af' : '#6b7280', marginTop: '0.25rem' }}>
+                    <div style={{ fontSize: '12px', color: (isExpired || isInactive) ? '#9ca3af' : '#6b7280', marginTop: '0.25rem' }}>
                       ✅ Includes: {pkg.includes.join(', ')}
                     </div>
                   )}
                   
-                  {/* ✅ Coming Soon or Expired Message */}
+                  {/* ✅ Show date info on user dashboard */}
+                  <div style={{ 
+                    fontSize: '11px', 
+                    color: '#6b7280', 
+                    marginTop: '0.5rem',
+                    padding: '0.25rem 0.5rem',
+                    background: '#f3f4f6',
+                    borderRadius: '4px'
+                  }}>
+                    {pkg.start_date && (
+                      <span>📅 Start: {new Date(pkg.start_date).toLocaleDateString()}</span>
+                    )}
+                    {pkg.end_date && (
+                      <span style={{ marginLeft: '0.5rem' }}>
+                        ⏳ End: {new Date(pkg.end_date).toLocaleDateString()}
+                      </span>
+                    )}
+                    {!pkg.start_date && !pkg.end_date && (
+                      <span>📅 No dates set</span>
+                    )}
+                  </div>
+                  
+                  {/* Status Messages */}
+                  {isInactive && (
+                    <div style={{ 
+                      marginTop: '0.75rem',
+                      padding: '0.5rem',
+                      background: '#f3f4f6',
+                      borderRadius: '8px',
+                      textAlign: 'center',
+                      border: '1px solid #d1d5db'
+                    }}>
+                      <span style={{ fontSize: '13px', color: '#6b7280' }}>
+                        ⛔ This package is currently inactive
+                      </span>
+                    </div>
+                  )}
+                  
                   {isComingSoon && (
                     <div style={{ 
                       marginTop: '0.75rem',
@@ -366,7 +417,7 @@ function UserTourPackages({ user }) {
                       border: '1px solid #f59e0b'
                     }}>
                       <span style={{ fontSize: '13px', color: '#92400e' }}>
-                        📅 Coming Soon - Available from {new Date(pkg.coming_soon_date).toLocaleDateString()}
+                        📅 Available from {new Date(pkg.start_date).toLocaleDateString()}
                       </span>
                     </div>
                   )}
@@ -385,16 +436,59 @@ function UserTourPackages({ user }) {
                       </span>
                     </div>
                   )}
+
+                  {isNoDates && (
+                    <div style={{ 
+                      marginTop: '0.75rem',
+                      padding: '0.5rem',
+                      background: '#f3f4f6',
+                      borderRadius: '8px',
+                      textAlign: 'center',
+                      border: '1px solid #d1d5db'
+                    }}>
+                      <span style={{ fontSize: '13px', color: '#6b7280' }}>
+                        📅 No future dates available
+                      </span>
+                    </div>
+                  )}
+
+                  {isFull && (
+                    <div style={{ 
+                      marginTop: '0.75rem',
+                      padding: '0.5rem',
+                      background: '#fef3c7',
+                      borderRadius: '8px',
+                      textAlign: 'center',
+                      border: '1px solid #f59e0b'
+                    }}>
+                      <span style={{ fontSize: '13px', color: '#92400e' }}>
+                        🔴 All available dates are fully booked
+                      </span>
+                    </div>
+                  )}
                 </div>
                 
-                {/* ✅ Booking Form - Hide if Expired or Coming Soon */}
-                {!isExpired && !isComingSoon && (
+                {/* ✅ Booking Form - Only show if available */}
+                {isAvailable && user && (
                   <div style={{ 
                     padding: '0 1.5rem 1.5rem 1.5rem',
                     borderTop: '1px solid rgba(26, 43, 60, 0.06)',
                     paddingTop: '1rem'
                   }}>
                     <Booking user={user} packageId={pkg.id} />
+                  </div>
+                )}
+
+                {/* Login message for available packages */}
+                {isAvailable && !user && (
+                  <div style={{ 
+                    padding: '0 1.5rem 1.5rem 1.5rem',
+                    paddingTop: '1rem',
+                    textAlign: 'center'
+                  }}>
+                    <p style={{ fontSize: '13px', color: '#6b7280' }}>
+                      🔒 Please <a href="/login" style={{ color: '#8B5CF6', textDecoration: 'none' }}>login</a> to book this package
+                    </p>
                   </div>
                 )}
               </div>
