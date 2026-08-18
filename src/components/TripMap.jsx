@@ -4,7 +4,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-// Fix for default markers - MUST be outside component
+// Fix for default markers
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -58,9 +58,9 @@ function TripMap({ trips }) {
   const [selectedTrip, setSelectedTrip] = useState(null)
 
   // Filter trips with coordinates
-  const tripsWithCoords = trips.filter(trip => 
+  const tripsWithCoords = trips?.filter(trip => 
     trip.latitude && trip.longitude
-  )
+  ) || []
 
   // Default center (Nairobi, Kenya)
   const defaultCenter = [-1.286389, 36.817223]
@@ -120,10 +120,10 @@ function TripMap({ trips }) {
               <Popup>
                 <div style={{ minWidth: '200px' }}>
                   <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '16px', fontWeight: '700' }}>
-                    {trip.destination}
+                    {trip.destination || trip.name || 'Trip'}
                   </h4>
                   <p style={{ margin: '0.25rem 0', fontSize: '13px', color: '#6b7280' }}>
-                    📅 {trip.duration_days} days
+                    📅 {trip.duration_days || 'N/A'} days
                   </p>
                   {trip.budget && (
                     <p style={{ margin: '0.25rem 0', fontSize: '13px', color: '#6b7280' }}>
@@ -131,11 +131,21 @@ function TripMap({ trips }) {
                     </p>
                   )}
                   <p style={{ margin: '0.5rem 0 0 0', fontSize: '12px', color: '#9ca3af' }}>
-                    {trip.latitude}, {trip.longitude}
+                    📍 {trip.latitude}, {trip.longitude}
                   </p>
+                  {trip.start_date && (
+                    <p style={{ margin: '0.25rem 0', fontSize: '12px', color: '#6b7280' }}>
+                      📅 Start: {new Date(trip.start_date).toLocaleDateString()}
+                    </p>
+                  )}
+                  {trip.departure_date && (
+                    <p style={{ margin: '0.25rem 0', fontSize: '12px', color: '#6b7280' }}>
+                      🚀 Departure: {new Date(trip.departure_date).toLocaleDateString()}
+                    </p>
+                  )}
                   <button
                     onClick={() => {
-                      alert(`Trip: ${trip.destination}\nDuration: ${trip.duration_days} days\nBudget: $${trip.budget || 'Flexible'}`)
+                      alert(`Trip: ${trip.destination || trip.name}\nDuration: ${trip.duration_days || 'N/A'} days\nBudget: $${trip.budget || 'Flexible'}`)
                     }}
                     style={{
                       marginTop: '0.5rem',

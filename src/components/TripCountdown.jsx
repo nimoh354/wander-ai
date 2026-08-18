@@ -1,3 +1,4 @@
+// src/components/TripCountdown.jsx
 import React, { useState, useEffect } from 'react'
 
 function TripCountdown({ trip }) {
@@ -9,11 +10,34 @@ function TripCountdown({ trip }) {
   })
   const [isPast, setIsPast] = useState(false)
 
+  // ✅ Extract date from itinerary or direct fields
+  const getTripDate = (trip) => {
+    // Check if date is in itinerary JSON
+    if (trip?.itinerary?.departure_date) {
+      return trip.itinerary.departure_date
+    }
+    if (trip?.itinerary?.arrival_date) {
+      return trip.itinerary.arrival_date
+    }
+    // Check direct fields
+    if (trip?.start_date) {
+      return trip.start_date
+    }
+    if (trip?.departure_date) {
+      return trip.departure_date
+    }
+    return null
+  }
+
   useEffect(() => {
-    if (!trip?.departure_date) return
+    const dateToUse = getTripDate(trip)
+    
+    if (!dateToUse) {
+      return
+    }
 
     const calculateTimeLeft = () => {
-      const departure = new Date(trip.departure_date)
+      const departure = new Date(dateToUse)
       const now = new Date()
       const diff = departure - now
 
@@ -37,9 +61,11 @@ function TripCountdown({ trip }) {
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [trip?.departure_date])
+  }, [trip])
 
-  if (!trip?.departure_date) {
+  const dateToUse = getTripDate(trip)
+
+  if (!dateToUse) {
     return (
       <div style={{
         padding: '1rem',
@@ -66,7 +92,7 @@ function TripCountdown({ trip }) {
         <span style={{ fontSize: '32px', display: 'block' }}>🎉</span>
         <p style={{ fontWeight: '600', color: '#22c55e' }}>Trip Complete!</p>
         <p style={{ fontSize: '13px', color: '#6b7280' }}>
-          Your trip to {trip.destination} has ended.
+          Your trip to {trip?.destination || 'your destination'} has ended.
         </p>
       </div>
     )
@@ -86,7 +112,7 @@ function TripCountdown({ trip }) {
         color: '#6b7280',
         marginBottom: '0.5rem'
       }}>
-        🚀 {trip.destination} is coming in...
+        🚀 {trip?.destination || 'Your trip'} is coming in...
       </p>
       <div style={{
         display: 'grid',
