@@ -8,6 +8,7 @@ import NewAdminLogin from './pages/NewAdminLogin'
 import TripAssistant from './pages/TripAssistant'  // ✅ Import TripAssistant
 import { ThemeProvider } from './context/ThemeContext'
 import { motion, AnimatePresence } from 'framer-motion'
+import SavedLists from './pages/SavedLists'
 
 function App() {
   const [session, setSession] = useState(null)

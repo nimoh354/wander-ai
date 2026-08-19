@@ -1,15 +1,47 @@
-import React, { useState } from 'react'
+// src/components/PackingList.jsx
+import React, { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
-function PackingList({ trip, onBack }) {
+function PackingList({ trip, onBack, user }) {
   const [items, setItems] = useState([])
   const [newItem, setNewItem] = useState('')
   const [showGenerator, setShowGenerator] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  // Auto-generate packing list based on trip
-  const generatePackingList = () => {
+  // ✅ Load saved list
+  useEffect(() => {
+    if (trip?.id && user?.id) {
+      loadList()
+    }
+  }, [trip?.id, user?.id])
+
+  const loadList = async () => {
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('packing_lists')
+        .select('*')
+        .eq('trip_id', trip.id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (!error && data) {
+        setItems(data.items || [])
+        setShowGenerator(false)
+      }
+    } catch (err) {
+      console.error('Error loading:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ✅ Generate list
+  const generateList = () => {
     const destination = trip?.destination?.toLowerCase() || ''
     const duration = trip?.duration_days || 5
-    const preferences = trip?.preferences || []
     
     const baseItems = [
       { name: 'Passport / ID', checked: false, category: 'Documents' },
@@ -25,76 +57,111 @@ function PackingList({ trip, onBack }) {
     ]
 
     const clothes = []
-    const days = Math.min(duration, 14)
-    for (let i = 0; i < days; i++) {
+    const days = Math.min(duration, 7)
+    for (let i = 0; i < Math.ceil(days / 2); i++) {
       clothes.push({ name: `Outfit ${i + 1}`, checked: false, category: 'Clothing' })
     }
 
-    const destinationItems = []
-    
+    let destItems = []
     if (destination.includes('beach') || destination.includes('bali') || destination.includes('maldives')) {
-      destinationItems.push({ name: 'Swimsuit', checked: false, category: 'Beach' })
-      destinationItems.push({ name: 'Beach towel', checked: false, category: 'Beach' })
-      destinationItems.push({ name: 'Flip flops', checked: false, category: 'Beach' })
-      destinationItems.push({ name: 'Sunglasses', checked: false, category: 'Beach' })
+      destItems = [
+        { name: 'Swimsuit', checked: false, category: 'Beach' },
+        { name: 'Beach towel', checked: false, category: 'Beach' },
+        { name: 'Flip flops', checked: false, category: 'Beach' },
+        { name: 'Sunglasses', checked: false, category: 'Beach' },
+      ]
     }
     
-    if (destination.includes('paris') || destination.includes('rome') || destination.includes('city')) {
-      destinationItems.push({ name: 'Comfortable walking shoes', checked: false, category: 'Clothing' })
-      destinationItems.push({ name: 'City map / guide', checked: false, category: 'Documents' })
-      destinationItems.push({ name: 'Umbrella', checked: false, category: 'Personal' })
+    if (destination.includes('safari') || destination.includes('kenya')) {
+      destItems = [
+        { name: 'Binoculars', checked: false, category: 'Safari' },
+        { name: 'Camera', checked: false, category: 'Electronics' },
+        { name: 'Neutral clothing', checked: false, category: 'Clothing' },
+        { name: 'Insect repellent', checked: false, category: 'Personal' }
+      ]
     }
+
+    const allItems = [...baseItems, ...clothes, ...destItems]
     
-    if (destination.includes('tokyo') || destination.includes('japan')) {
-      destinationItems.push({ name: 'Pocket WiFi / SIM card', checked: false, category: 'Electronics' })
-      destinationItems.push({ name: 'Transportation pass', checked: false, category: 'Documents' })
-    }
-
-    const preferenceItems = []
-    if (preferences.includes('adventure') || preferences.includes('hiking')) {
-      preferenceItems.push({ name: 'Hiking shoes', checked: false, category: 'Clothing' })
-      preferenceItems.push({ name: 'Backpack', checked: false, category: 'Personal' })
-      preferenceItems.push({ name: 'Water bottle', checked: false, category: 'Personal' })
-    }
-    
-    if (preferences.includes('food') || preferences.includes('cuisine')) {
-      preferenceItems.push({ name: 'Reusable utensils', checked: false, category: 'Personal' })
-      preferenceItems.push({ name: 'Food container', checked: false, category: 'Personal' })
-    }
-
-    const allItems = [
-      ...baseItems,
-      ...clothes.slice(0, Math.ceil(days / 2)),
-      ...destinationItems,
-      ...preferenceItems
-    ]
-
-    const extraItems = [
-      { name: 'Snacks', category: 'Personal' },
-      { name: 'Travel pillow', category: 'Personal' },
-      { name: 'Eye mask', category: 'Personal' },
-      { name: 'Earplugs', category: 'Personal' },
-      { name: 'Journal', category: 'Personal' },
-      { name: 'Reusable bag', category: 'Personal' },
-      { name: 'Waterproof pouch', category: 'Personal' }
-    ]
-    const randomExtra = extraItems.slice(0, Math.floor(Math.random() * 3) + 1)
-    const extraItemsObj = randomExtra.map(item => ({ ...item, checked: false }))
-
-    const finalItems = [...allItems, ...extraItemsObj]
-    
-    const uniqueItems = finalItems.filter((item, index, self) => 
+    const uniqueItems = allItems.filter((item, index, self) => 
       index === self.findIndex(t => t.name.toLowerCase() === item.name.toLowerCase())
     )
 
     setItems(uniqueItems)
     setShowGenerator(false)
+    setSaved(false)
   }
 
+  // ✅ FIXED: Toggle item checked state
   const toggleItem = (index) => {
-    const newItems = [...items]
-    newItems[index].checked = !newItems[index].checked
-    setItems(newItems)
+    console.log('🔄 Toggling item at index:', index)
+    console.log('📦 Current item:', items[index])
+    
+    setItems(prevItems => {
+      const newItems = [...prevItems]
+      newItems[index] = {
+        ...newItems[index],
+        checked: !newItems[index].checked
+      }
+      console.log('✅ New checked state:', newItems[index].checked)
+      setSaved(false)
+      return newItems
+    })
+  }
+
+  // ✅ Save list
+  const saveList = async () => {
+    if (items.length === 0) {
+      alert('Your packing list is empty!')
+      return
+    }
+
+    if (!user?.id) {
+      alert('Please log in to save')
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      const { data: existing } = await supabase
+        .from('packing_lists')
+        .select('id')
+        .eq('trip_id', trip.id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      let result
+      if (existing) {
+        result = await supabase
+          .from('packing_lists')
+          .update({ items: items, updated_at: new Date().toISOString() })
+          .eq('id', existing.id)
+      } else {
+        result = await supabase
+          .from('packing_lists')
+          .insert({
+            trip_id: trip.id,
+            user_id: user.id,
+            items: items,
+            created_at: new Date().toISOString()
+          })
+      }
+
+      if (result.error) {
+        alert('Failed to save: ' + result.error.message)
+        return
+      }
+
+      setSaved(true)
+      alert('Packing list saved! ✅')
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      console.error('Error:', err)
+      alert('Failed to save')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const addItem = (e) => {
@@ -102,16 +169,21 @@ function PackingList({ trip, onBack }) {
     if (!newItem.trim()) return
     setItems([...items, { name: newItem.trim(), checked: false, category: 'Custom' }])
     setNewItem('')
+    setSaved(false)
   }
 
   const deleteItem = (index) => {
-    const newItems = items.filter((_, i) => i !== index)
-    setItems(newItems)
+    setItems(items.filter((_, i) => i !== index))
+    setSaved(false)
   }
 
   const resetItems = () => {
+    if (items.length > 0 && !confirm('Reset your packing list?')) {
+      return
+    }
     setItems([])
     setShowGenerator(true)
+    setSaved(false)
   }
 
   const totalItems = items.length
@@ -127,9 +199,22 @@ function PackingList({ trip, onBack }) {
 
   const categories = Object.keys(groupedItems)
 
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '2rem',
+        color: '#6b7280'
+      }}>
+        <p>Loading your packing list...</p>
+      </div>
+    )
+  }
+
   return (
     <div>
-      {/* Back Button at the top (always visible) */}
       {onBack && (
         <button
           onClick={onBack}
@@ -141,8 +226,7 @@ function PackingList({ trip, onBack }) {
             borderRadius: '8px',
             cursor: 'pointer',
             marginBottom: '1.5rem',
-            fontWeight: '600',
-            transition: 'all 0.2s ease'
+            fontWeight: '600'
           }}
           onMouseEnter={(e) => {
             e.target.style.background = '#1a1a2e'
@@ -157,6 +241,34 @@ function PackingList({ trip, onBack }) {
         </button>
       )}
 
+      {trip && (
+        <div style={{
+          background: 'linear-gradient(135deg, #f5f3ff, #ede9fe)',
+          padding: '0.75rem 1.25rem',
+          borderRadius: '12px',
+          marginBottom: '1.5rem',
+          border: '1px solid rgba(139, 92, 246, 0.15)'
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '0.5rem'
+          }}>
+            <div>
+              <p style={{ fontSize: '11px', color: '#6b7280', margin: 0 }}>📍 Trip to</p>
+              <h4 style={{ fontSize: '17px', fontWeight: '700', color: '#1a1a2e', margin: 0 }}>
+                {trip.destination || 'Unknown'}
+              </h4>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', fontSize: '12px', color: '#6b7280' }}>
+              {trip.duration_days && <span>📅 {trip.duration_days}d</span>}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{
         background: 'white',
         borderRadius: '20px',
@@ -166,7 +278,6 @@ function PackingList({ trip, onBack }) {
         maxWidth: '700px',
         margin: '0 auto'
       }}>
-        {/* Header */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -186,19 +297,34 @@ function PackingList({ trip, onBack }) {
               🧳 Packing List
             </h3>
             {!showGenerator && items.length > 0 && (
-              <p style={{
-                fontSize: '14px',
-                color: '#6b7280',
-                marginTop: '0.25rem'
-              }}>
+              <p style={{ fontSize: '14px', color: '#6b7280', marginTop: '0.25rem' }}>
                 {checkedItems} of {totalItems} items packed
               </p>
             )}
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {!showGenerator && items.length > 0 && (
+              <button
+                onClick={saveList}
+                disabled={saving}
+                style={{
+                  padding: '0.6rem 1.2rem',
+                  background: saved ? '#22c55e' : 'linear-gradient(135deg, #22c55e, #16a34a)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '13px',
+                  opacity: saving ? 0.6 : 1
+                }}
+              >
+                {saving ? 'Saving...' : saved ? '✅ Saved!' : '💾 Save List'}
+              </button>
+            )}
             {showGenerator ? (
               <button
-                onClick={generatePackingList}
+                onClick={generateList}
                 style={{
                   padding: '0.6rem 1.5rem',
                   background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
@@ -207,16 +333,7 @@ function PackingList({ trip, onBack }) {
                   borderRadius: '12px',
                   cursor: 'pointer',
                   fontWeight: '600',
-                  fontSize: '14px',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = 'scale(1.02)'
-                  e.target.style.boxShadow = '0 4px 16px rgba(232, 141, 92, 0.3)'
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'scale(1)'
-                  e.target.style.boxShadow = 'none'
+                  fontSize: '14px'
                 }}
               >
                 ✨ Generate List
@@ -228,22 +345,15 @@ function PackingList({ trip, onBack }) {
                   style={{
                     padding: '0.5rem 1.2rem',
                     background: 'transparent',
-                    color: '#6b7280',
-                    border: '1px solid #d1d5db',
+                    color: '#ef4444',
+                    border: '1px solid #fca5a5',
                     borderRadius: '8px',
                     cursor: 'pointer',
                     fontWeight: '500',
-                    fontSize: '13px',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.background = '#f3f4f6'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.background = 'transparent'
+                    fontSize: '13px'
                   }}
                 >
-                  🔄 Reset
+                  🗑️ Reset
                 </button>
                 {items.length > 0 && (
                   <span style={{
@@ -262,7 +372,6 @@ function PackingList({ trip, onBack }) {
           </div>
         </div>
 
-        {/* Progress Bar */}
         {!showGenerator && items.length > 0 && (
           <div style={{
             width: '100%',
@@ -282,38 +391,8 @@ function PackingList({ trip, onBack }) {
           </div>
         )}
 
-        {/* Items List */}
         {!showGenerator && items.length > 0 ? (
           <div>
-            {/* ✅ BACK TO DASHBOARD BUTTON INSIDE RESULTS */}
-            <button
-              onClick={onBack}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '0.75rem',
-                background: 'transparent',
-                color: '#1a1a2e',
-                border: '2px solid #1a1a2e',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                fontWeight: '600',
-                fontSize: '14px',
-                marginBottom: '1.5rem',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = '#1a1a2e'
-                e.target.style.color = 'white'
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = 'transparent'
-                e.target.style.color = '#1a1a2e'
-              }}
-            >
-              ← Back to Dashboard
-            </button>
-
             {categories.map((category) => (
               <div key={category} style={{ marginBottom: '1.5rem' }}>
                 <h4 style={{
@@ -362,7 +441,10 @@ function PackingList({ trip, onBack }) {
                         <input
                           type="checkbox"
                           checked={item.checked}
-                          onChange={() => toggleItem(globalIndex)}
+                          onChange={() => {
+                            console.log('✅ Checkbox clicked for:', item.name, 'index:', globalIndex)
+                            toggleItem(globalIndex)
+                          }}
                           style={{
                             width: '20px',
                             height: '20px',
@@ -389,17 +471,10 @@ function PackingList({ trip, onBack }) {
                             color: '#ef4444',
                             fontSize: '16px',
                             padding: '0 4px',
-                            opacity: 0.6,
-                            transition: 'all 0.2s ease'
+                            opacity: 0.6
                           }}
-                          onMouseEnter={(e) => {
-                            e.target.style.opacity = '1'
-                            e.target.style.transform = 'scale(1.2)'
-                          }}
-                          onMouseLeave={(e) => {
-                            e.target.style.opacity = '0.6'
-                            e.target.style.transform = 'scale(1)'
-                          }}
+                          onMouseEnter={(e) => e.target.style.opacity = '1'}
+                          onMouseLeave={(e) => e.target.style.opacity = '0.6'}
                         >
                           ✕
                         </button>
@@ -421,10 +496,10 @@ function PackingList({ trip, onBack }) {
               Generate your packing list
             </p>
             <p style={{ fontSize: '14px', marginTop: '0.5rem' }}>
-              Based on your destination, duration, and preferences
+              Based on your destination and duration
             </p>
             <button
-              onClick={generatePackingList}
+              onClick={generateList}
               style={{
                 marginTop: '1.5rem',
                 padding: '0.75rem 2rem',
@@ -434,16 +509,7 @@ function PackingList({ trip, onBack }) {
                 borderRadius: '12px',
                 cursor: 'pointer',
                 fontWeight: '600',
-                fontSize: '16px',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.transform = 'scale(1.02)'
-                e.target.style.boxShadow = '0 4px 16px rgba(232, 141, 92, 0.3)'
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.transform = 'scale(1)'
-                e.target.style.boxShadow = 'none'
+                fontSize: '16px'
               }}
             >
               ✨ Generate List
@@ -455,38 +521,35 @@ function PackingList({ trip, onBack }) {
           </p>
         )}
 
-{/* Back to Dashboard Button - Bottom */}
-<button
-  onClick={onBack}
-  style={{
-    display: 'block',
-    width: '100%',
-    padding: '0.75rem',
-    background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
-    color: 'white',
-    border: 'none',
-    borderRadius: '12px',
-    cursor: 'pointer',
-    fontWeight: '700',
-    fontSize: '16px',
-    marginTop: '1rem',
-    marginBottom: '1rem',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 4px 16px rgba(232, 141, 92, 0.3)'
-  }}
-  onMouseEnter={(e) => {
-    e.target.style.transform = 'scale(1.02)'
-    e.target.style.boxShadow = '0 8px 24px rgba(232, 141, 92, 0.4)'
-  }}
-  onMouseLeave={(e) => {
-    e.target.style.transform = 'scale(1)'
-    e.target.style.boxShadow = '0 4px 16px rgba(232, 141, 92, 0.3)'
-  }}
->
-  ← Back to Dashboard
-</button>
+        <button
+          onClick={onBack}
+          style={{
+            display: 'block',
+            width: '100%',
+            padding: '0.75rem',
+            background: 'linear-gradient(135deg, #E88D5C, #D97A4A)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '12px',
+            cursor: 'pointer',
+            fontWeight: '700',
+            fontSize: '16px',
+            marginTop: '1rem',
+            marginBottom: '1rem',
+            boxShadow: '0 4px 16px rgba(232, 141, 92, 0.3)'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.transform = 'scale(1.02)'
+            e.target.style.boxShadow = '0 8px 24px rgba(232, 141, 92, 0.4)'
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.transform = 'scale(1)'
+            e.target.style.boxShadow = '0 4px 16px rgba(232, 141, 92, 0.3)'
+          }}
+        >
+          ← Back to Dashboard
+        </button>
 
-        {/* Add Custom Item */}
         {!showGenerator && (
           <form onSubmit={addItem} style={{
             display: 'flex',

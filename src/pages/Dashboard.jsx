@@ -1,7 +1,8 @@
+// src/pages/Dashboard.jsx
 // ============================================================
 // 1. IMPORTS
 // ============================================================
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useTheme } from '../context/ThemeContext'
 import { supabase } from '../lib/supabase'
 import Navbar from '../components/Navbar'
@@ -24,6 +25,7 @@ import UserTourPackages from '../components/UserTourPackages'
 import BookingDashboard from '../components/BookingDashboard'
 import SlidePanel from '../components/SlidePanel'
 import MyReviews from './MyReviews'
+import SavedLists from './SavedLists'
 
 // ============================================================
 // 2. MAIN COMPONENT
@@ -34,6 +36,7 @@ function Dashboard() {
   // ============================================================
   const [user, setUser] = useState(null)
   const [trips, setTrips] = useState([])
+  const [tourPackages, setTourPackages] = useState([])
   const [loading, setLoading] = useState(true)
   const [showTripGenerator, setShowTripGenerator] = useState(false)
   const [showOperatorRegistration, setShowOperatorRegistration] = useState(false)
@@ -55,11 +58,21 @@ function Dashboard() {
   const [showMyReviews, setShowMyReviews] = useState(false)
   const [fetchError, setFetchError] = useState(null)
   const [allReviews, setAllReviews] = useState([])
+  const [showSavedLists, setShowSavedLists] = useState(false) // ✅ NEW: Saved Lists state
+
+  // ✅ Refs to prevent double fetching
+  const fetchedRef = useRef(false)
+  const loadTripsRef = useRef(false)
 
   // ============================================================
   // 2.2 FETCH USER DATA
   // ============================================================
   useEffect(() => {
+    if (fetchedRef.current) return
+    fetchedRef.current = true
+
+    console.log('🔄 Dashboard: Starting initial load...')
+
     const getUser = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser()
@@ -102,9 +115,10 @@ function Dashboard() {
             setUserType('tourist')
           }
           
-          // Fetch trips and reviews
+          // ✅ Fetch trips, tour packages, and reviews
           try {
             await loadTrips(user.id)
+            await loadTourPackages()
             await loadAllReviews()
           } catch (err) {
             console.error('Error loading data:', err)
@@ -120,11 +134,10 @@ function Dashboard() {
     }
     
     getUser()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ============================================================
-  // 2.3 HELPER FUNCTIONS (FIXED - WORKING QUERIES)
+  // 2.3 HELPER FUNCTIONS
   // ============================================================
   
   const handleLogout = async () => {
@@ -136,15 +149,19 @@ function Dashboard() {
     }
   }
 
-  // FIXED: Load trips with working review queries
   const loadTrips = async (userId = null) => {
+    if (loadTripsRef.current) {
+      console.log('⏭️ Skipping duplicate loadTrips call')
+      return
+    }
+    loadTripsRef.current = true
+
     const currentUserId = userId || user?.id
     if (!currentUserId) return
     
     try {
       setFetchError(null)
       
-      // Fetch trips
       const { data: tripsData, error: tripsError } = await supabase
         .from('trips')
         .select('*')
@@ -159,11 +176,7 @@ function Dashboard() {
         setFetchError('Failed to load trips')
       }
       
-      // ============================================================
-      // FIXED: Load personal reviews - using simple SELECT first
-      // ============================================================
       try {
-        // First, get reviews for this user
         const { data: reviewsData, error: reviewsError } = await supabase
           .from('trip_reviews')
           .select('*')
@@ -173,7 +186,6 @@ function Dashboard() {
         if (!reviewsError && reviewsData) {
           console.log(`✅ Found ${reviewsData.length} personal reviews`)
           
-          // If we have reviews, get profile info separately
           if (reviewsData.length > 0) {
             const { data: profileData } = await supabase
               .from('profiles')
@@ -181,7 +193,6 @@ function Dashboard() {
               .eq('id', currentUserId)
               .single()
             
-            // Combine the data
             const enrichedReviews = reviewsData.map(review => ({
               ...review,
               profiles: profileData || { full_name: 'You', email: user?.email }
@@ -207,12 +218,32 @@ function Dashboard() {
     }
   }
 
-  // FIXED: Load all public reviews with working queries
+  const loadTourPackages = async () => {
+    try {
+      console.log('📦 Loading tour packages...')
+      const { data, error } = await supabase
+        .from('tour_packages')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (!error && data) {
+        setTourPackages(data)
+        console.log(`✅ Loaded ${data.length} tour packages`)
+        
+        const withCoords = data.filter(p => p.latitude && p.longitude)
+        console.log(`📍 ${withCoords.length} packages have coordinates`)
+      } else if (error) {
+        console.error('Error fetching tour packages:', error)
+      }
+    } catch (err) {
+      console.error('Error loading tour packages:', err)
+    }
+  }
+
   const loadAllReviews = async () => {
     try {
       console.log('Loading all reviews...')
       
-      // Step 1: Get all reviews
       const { data: reviewsData, error: reviewsError } = await supabase
         .from('trip_reviews')
         .select('*')
@@ -233,11 +264,9 @@ function Dashboard() {
 
       console.log(`✅ Found ${reviewsData.length} reviews`)
 
-      // Step 2: Get all unique user IDs from reviews
       const userIds = [...new Set(reviewsData.map(r => r.user_id).filter(Boolean))]
       console.log(`👤 Found ${userIds.length} unique users`)
 
-      // Step 3: Fetch profiles for these users
       let profilesMap = {}
       if (userIds.length > 0) {
         const { data: profilesData, error: profilesError } = await supabase
@@ -256,11 +285,9 @@ function Dashboard() {
         }
       }
 
-      // Step 4: Get all unique trip IDs from reviews
       const tripIds = [...new Set(reviewsData.map(r => r.trip_id).filter(Boolean))]
       console.log(`📍 Found ${tripIds.length} unique trips`)
 
-      // Step 5: Fetch trip data for these reviews
       let tripsMap = {}
       if (tripIds.length > 0) {
         const { data: tripsData, error: tripsError } = await supabase
@@ -279,7 +306,6 @@ function Dashboard() {
         }
       }
 
-      // Step 6: Combine all the data
       const combinedData = reviewsData.map(review => ({
         ...review,
         profiles: profilesMap[review.user_id] || null,
@@ -324,8 +350,52 @@ function Dashboard() {
   }
 
   // ============================================================
-  // 2.5 PAGE VIEWS (Conditions) - [KEPT THE SAME AS YOUR ORIGINAL]
+  // 2.5 PAGE VIEWS
   // ============================================================
+
+  // ---- Page: Saved Lists ----
+  if (showSavedLists) {
+    return (
+      <div>
+        <Navbar user={user} onLogout={handleLogout} />
+        <div style={{
+          minHeight: '100vh',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
+          padding: '2rem'
+        }}>
+          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+            <SavedLists 
+              user={user} 
+              onLogout={handleLogout}
+              onBack={() => setShowSavedLists(false)}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ---- Page: Packing List ----
+  if (selectedTripForPacking) {
+    return (
+      <div>
+        <Navbar user={user} onLogout={handleLogout} />
+        <div style={{
+          minHeight: '100vh',
+          background: darkMode ? '#0f0f1a' : '#f5f3ff',
+          padding: '2rem'
+        }}>
+          <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+            <PackingList 
+              trip={selectedTripForPacking} 
+              user={user}
+              onBack={() => setSelectedTripForPacking(null)} 
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // ---- Page: Operator Dashboard ----
   if (userType === 'operator' && !showProfile && !showOperatorRegistration) {
@@ -419,6 +489,7 @@ function Dashboard() {
         <TripGenerator 
           user={user} 
           onTripSaved={() => {
+            loadTripsRef.current = false
             loadTrips()
             setShowTripGenerator(false)
           }} 
@@ -441,7 +512,10 @@ function Dashboard() {
             user={user} 
             onLogout={handleLogout} 
             onClose={() => setShowProfile(false)}
-            onProfileUpdate={() => loadTrips()}
+            onProfileUpdate={() => {
+              loadTripsRef.current = false
+              loadTrips()
+            }}
           />
         </div>
       </div>
@@ -558,6 +632,10 @@ function Dashboard() {
 
   // ---- Page: Map View ----
   if (showMap) {
+    const tripsWithCoords = trips.filter(t => t.latitude && t.longitude)
+    const packagesWithCoords = tourPackages.filter(p => p.latitude && p.longitude)
+    const allLocations = [...tripsWithCoords, ...packagesWithCoords]
+    
     return (
       <div>
         <Navbar user={user} onLogout={handleLogout} />
@@ -593,7 +671,8 @@ function Dashboard() {
                 ← Back to Dashboard
               </button>
             </div>
-            {trips.length === 0 ? (
+            
+            {allLocations.length === 0 ? (
               <div style={{
                 background: darkMode ? '#1a1a2e' : 'white',
                 borderRadius: '16px',
@@ -606,7 +685,7 @@ function Dashboard() {
                 <p style={{ color: '#6b7280' }}>Create a trip first to see it on the map!</p>
               </div>
             ) : (
-              <TripMap trips={trips} />
+              <TripMap trips={allLocations} />
             )}
           </div>
         </div>
@@ -641,27 +720,6 @@ function Dashboard() {
               ← Back to Dashboard
             </button>
             <TripCalendar trips={trips} />
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // ---- Page: Packing List ----
-  if (selectedTripForPacking) {
-    return (
-      <div>
-        <Navbar user={user} onLogout={handleLogout} />
-        <div style={{
-          minHeight: '100vh',
-          background: darkMode ? '#0f0f1a' : '#f5f3ff',
-          padding: '2rem'
-        }}>
-          <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-            <PackingList 
-              trip={selectedTripForPacking} 
-              onBack={() => setSelectedTripForPacking(null)} 
-            />
           </div>
         </div>
       </div>
@@ -1074,7 +1132,7 @@ function Dashboard() {
   }
 
   // ============================================================
-  // 2.6 MAIN DASHBOARD (Default View)
+  // 2.6 MAIN DASHBOARD
   // ============================================================
   return (
     <div>
@@ -1174,7 +1232,7 @@ function Dashboard() {
             </div>
           </div>
 
-          {/* Quick Actions Grid - [KEPT THE SAME AS YOUR ORIGINAL] */}
+          {/* Quick Actions Grid */}
           <div className="quick-actions" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -1327,6 +1385,38 @@ function Dashboard() {
               <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📅</span>
               <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem' }}>Calendar</h3>
               <p style={{ fontSize: '13px', color: '#6b7280' }}>View your trips</p>
+            </button>
+
+            {/* ✅ SAVED LISTS BUTTON */}
+            <button
+              onClick={() => setShowSavedLists(true)}
+              style={{
+                background: darkMode ? '#1a1a2e' : 'white',
+                color: darkMode ? '#e4e4e7' : '#1a1a2e',
+                border: `2px solid ${darkMode ? '#2d2d44' : '#1a1a2e'}`,
+                padding: '1.5rem',
+                borderRadius: '16px',
+                textAlign: 'left',
+                width: '100%',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-4px)'
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+            >
+              <span style={{ fontSize: '28px', display: 'block', marginBottom: '0.5rem' }}>📋</span>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '0.25rem', color: darkMode ? '#e4e4e7' : '#1a1a2e' }}>
+                Saved Lists
+              </h3>
+              <p style={{ fontSize: '13px', color: '#6b7280' }}>
+                View your packing lists
+              </p>
             </button>
 
             {userType === 'admin' && (
@@ -1833,9 +1923,7 @@ function Dashboard() {
             </div>
           )}
 
-          {/* ============================================================
-            COMMUNITY REVIEWS SECTION - FIXED with proper error handling
-            ============================================================ */}
+          {/* Community Reviews Section */}
           <div style={{ marginTop: '3rem' }}>
             <div style={{
               display: 'flex',
@@ -1940,7 +2028,6 @@ function Dashboard() {
                 gap: '1.5rem'
               }}>
                 {allReviews.map((review) => {
-                  // Determine the reviewer name
                   let reviewerName = 'Anonymous'
                   if (review.profiles) {
                     if (typeof review.profiles === 'object') {
@@ -1950,7 +2037,6 @@ function Dashboard() {
                     }
                   }
 
-                  // Check if this is the current user's review
                   const isOwnReview = review.user_id === user?.id
                   
                   return (
@@ -2062,7 +2148,4 @@ function Dashboard() {
   )
 }
 
-// ============================================================
-// 3. EXPORT
-// ============================================================
 export default Dashboard

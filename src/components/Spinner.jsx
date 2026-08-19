@@ -14,5 +14,5 @@ function Spinner() {
   )
 }
 
-// Add this CSS to your index.css or use inline
+
 export default Spinner
