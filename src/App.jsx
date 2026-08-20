@@ -5,7 +5,8 @@ import Dashboard from './pages/Dashboard'
 import SharedTrip from './pages/SharedTrip'
 import AdminDashboard from './pages/AdminDashboard'
 import NewAdminLogin from './pages/NewAdminLogin'
-import TripAssistant from './pages/TripAssistant'  // ✅ Import TripAssistant
+import TripAssistant from './pages/TripAssistant'
+import Profile from './pages/Profile'
 import { ThemeProvider } from './context/ThemeContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import SavedLists from './pages/SavedLists'
@@ -15,7 +16,8 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [isSharedTrip, setIsSharedTrip] = useState(false)
   const [isAdminRoute, setIsAdminRoute] = useState(false)
-  const [isAssistantRoute, setIsAssistantRoute] = useState(false)  // ✅ New state
+  const [isAssistantRoute, setIsAssistantRoute] = useState(false)
+  const [isProfileRoute, setIsProfileRoute] = useState(false)
   const [adminPath, setAdminPath] = useState('')
 
   useEffect(() => {
@@ -28,6 +30,13 @@ function App() {
       return
     }
     
+    // Check for profile route
+    if (pathname === '/profile') {
+      setIsProfileRoute(true)
+      setLoading(false)
+      return
+    }
+
     // Check for admin routes
     if (pathname === '/admin' || pathname.startsWith('/admin/')) {
       setIsAdminRoute(true)
@@ -36,7 +45,7 @@ function App() {
       return
     }
 
-    // ✅ Check for assistant route
+    // Check for assistant route
     if (pathname === '/assistant') {
       setIsAssistantRoute(true)
       setLoading(false)
@@ -56,7 +65,11 @@ function App() {
       setSession(session)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      if (subscription) {
+        subscription.unsubscribe()
+      }
+    }
   }, [])
 
   const handleLogout = async () => {
@@ -99,7 +112,17 @@ function App() {
     )
   }
 
-  // ✅ Assistant route
+  // Profile route
+  if (isProfileRoute) {
+    const currentUser = session?.user
+    return (
+      <ThemeProvider>
+        <Profile user={currentUser} onLogout={handleLogout} />
+      </ThemeProvider>
+    )
+  }
+
+  // Assistant route
   if (isAssistantRoute) {
     return (
       <ThemeProvider>

@@ -1,134 +1,113 @@
 // src/components/SlidePanel.jsx
-import React from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import React, { useEffect, useRef } from 'react'
+import { useTheme } from '../context/ThemeContext'
 
-export default function SlidePanel({ open, onClose, title, children }) {
-  // Handle close with safety check
-  const handleClose = () => {
-    console.log('SlidePanel: Closing panel')
-    if (typeof onClose === 'function') {
-      onClose()
+function SlidePanel({ open, onClose, title, children }) {
+  const { darkMode } = useTheme()
+  const panelRef = useRef(null)
+
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden'
     } else {
-      console.warn('SlidePanel: onClose is not a function', onClose)
+      document.body.style.overflow = 'auto'
     }
-  }
+    return () => {
+      document.body.style.overflow = 'auto'
+    }
+  }, [open])
 
-  // Handle backdrop click
-  const handleBackdropClick = (e) => {
-    if (e.target === e.currentTarget) {
-      console.log('SlidePanel: Backdrop clicked')
-      handleClose()
-    }
-  }
+  if (!open) return null
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1200,
-            display: 'flex',
-            justifyContent: 'flex-end',
-            background: 'rgba(0,0,0,0.35)'
-          }}
-          onClick={handleBackdropClick}
-        >
-          <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-            onClick={(e) => e.stopPropagation()}
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 1000,
+      display: 'flex',
+      justifyContent: 'flex-end',
+      background: 'rgba(0,0,0,0.5)',
+      backdropFilter: 'blur(4px)',
+      animation: 'fadeIn 0.3s ease'
+    }}>
+      <div
+        ref={panelRef}
+        style={{
+          width: '100%',
+          maxWidth: '600px',
+          height: '100%',
+          background: darkMode ? '#0d1b33' : 'white',
+          boxShadow: '-4px 0 24px rgba(0,0,0,0.15)',
+          padding: '2rem',
+          overflowY: 'auto',
+          animation: 'slideIn 0.3s ease',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1.5rem',
+          paddingBottom: '1rem',
+          borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.06)' : '#e5e7eb'}`
+        }}>
+          <h2 style={{
+            fontSize: '22px',
+            fontWeight: '700',
+            fontFamily: "'Playfair Display', serif",
+            color: darkMode ? '#e8edf5' : '#1a1a2e',
+            margin: 0
+          }}>
+            {title}
+          </h2>
+          <button
+            onClick={onClose}
             style={{
-              width: 'min(980px, 100%)',
-              height: '100vh',
-              background: 'var(--panel-bg, white)',
-              padding: '1.25rem 1.5rem',
-              boxShadow: '-12px 0 30px rgba(0,0,0,0.12)',
-              overflowY: 'auto'
+              background: 'none',
+              border: 'none',
+              fontSize: '24px',
+              cursor: 'pointer',
+              color: darkMode ? '#7a8ba8' : '#6b7280',
+              padding: '0.25rem',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.color = darkMode ? '#e8edf5' : '#1a1a2e'
+              e.target.style.transform = 'scale(1.1)'
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.color = darkMode ? '#7a8ba8' : '#6b7280'
+              e.target.style.transform = 'scale(1)'
             }}
           >
-            {/* Header */}
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              marginBottom: '1rem',
-              flexShrink: 0
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  aria-label="Back to Dashboard"
-                  style={{
-                    background: 'transparent',
-                    color: 'inherit',
-                    border: '2px solid transparent',
-                    padding: '0.35rem 0.6rem',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: 600
-                  }}
-                >
-                  ← Back
-                </button>
-                <h2 style={{ margin: 0 }}>{title}</h2>
-              </div>
-              <button 
-                type="button" 
-                onClick={handleClose} 
-                style={{ 
-                  background: 'transparent', 
-                  border: 'none', 
-                  fontSize: '18px', 
-                  cursor: 'pointer',
-                  padding: '0.35rem 0.6rem',
-                  borderRadius: '8px'
-                }} 
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
+            ✕
+          </button>
+        </div>
 
-            {/* Content */}
-            <div>
-              {children}
-            </div>
+        {/* Content */}
+        <div style={{ flex: 1 }}>
+          {children}
+        </div>
+      </div>
 
-            {/* Footer */}
-            <div style={{ 
-              marginTop: '1.5rem', 
-              display: 'flex', 
-              justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              <button
-                type="button"
-                onClick={handleClose}
-                style={{
-                  background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
-                  color: 'white',
-                  border: 'none',
-                  padding: '0.75rem 1.25rem',
-                  borderRadius: '10px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  fontSize: '15px'
-                }}
-              >
-                ← Back to Dashboard
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideIn {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+      `}</style>
+    </div>
   )
 }
+
+export default SlidePanel

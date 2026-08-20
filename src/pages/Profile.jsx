@@ -1,8 +1,10 @@
 // src/components/Profile.jsx
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useTheme } from '../context/ThemeContext'
 
 function Profile({ user, onLogout, onClose, onProfileUpdate }) {
+  const { darkMode } = useTheme()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -14,12 +16,27 @@ function Profile({ user, onLogout, onClose, onProfileUpdate }) {
   const [avatarUrl, setAvatarUrl] = useState('')
   const [uploading, setUploading] = useState(false)
   const [tripStats, setTripStats] = useState({ total: 0, countries: [] })
-  const [darkMode, setDarkMode] = useState(false)
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      setLoading(true)
-      
+    // ✅ Check if user exists before fetching
+    if (user?.id) {
+      fetchProfile()
+    } else {
+      setLoading(false)
+    }
+  }, [user])
+
+  const fetchProfile = async () => {
+    // ✅ Safety check
+    if (!user?.id) {
+      console.log('No user ID available')
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    
+    try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -34,6 +51,7 @@ function Profile({ user, onLogout, onClose, onProfileUpdate }) {
         setAvatarUrl(data.avatar_url || '')
       }
       
+      // Fetch trip stats
       const { data: trips } = await supabase
         .from('trips')
         .select('destination')
@@ -47,16 +65,30 @@ function Profile({ user, onLogout, onClose, onProfileUpdate }) {
           countries: uniqueCountries
         })
       }
-      
+    } catch (error) {
+      console.error('Error fetching profile:', error)
+    } finally {
       setLoading(false)
     }
-    
-    fetchProfile()
-  }, [user])
+  }
 
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0]
     if (!file) return
+    
+    // ✅ Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage('❌ Image too large. Please choose an image under 5MB.')
+      setMessageType('error')
+      return
+    }
+
+    // ✅ Check file type
+    if (!file.type.startsWith('image/')) {
+      setMessage('❌ Please upload an image file.')
+      setMessageType('error')
+      return
+    }
     
     setUploading(true)
     setMessage('')
@@ -68,7 +100,10 @@ function Profile({ user, onLogout, onClose, onProfileUpdate }) {
       
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, file)
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true
+        })
       
       if (uploadError) {
         throw uploadError
@@ -81,6 +116,26 @@ function Profile({ user, onLogout, onClose, onProfileUpdate }) {
       setAvatarUrl(publicUrl)
       setMessage('✅ Avatar uploaded successfully!')
       setMessageType('success')
+      
+      // ✅ Auto-save after upload
+      setTimeout(async () => {
+        try {
+          const { error } = await supabase
+            .from('profiles')
+            .update({
+              avatar_url: publicUrl,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', user.id)
+          
+          if (error) throw error
+          
+          if (onProfileUpdate) onProfileUpdate()
+        } catch (err) {
+          console.error('Auto-save error:', err)
+        }
+      }, 500)
+      
     } catch (error) {
       setMessage(`❌ ${error.message || 'Failed to upload avatar'}`)
       setMessageType('error')
@@ -90,6 +145,13 @@ function Profile({ user, onLogout, onClose, onProfileUpdate }) {
   }
 
   const handleSave = async () => {
+    // ✅ Safety check
+    if (!user?.id) {
+      setMessage('❌ Please log in to save profile')
+      setMessageType('error')
+      return
+    }
+
     setSaving(true)
     setMessage('')
     setMessageType('')
@@ -185,6 +247,7 @@ function Profile({ user, onLogout, onClose, onProfileUpdate }) {
         boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
         border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(26,43,60,0.06)'}`
       }}>
+        {/* Avatar Section */}
         <div style={{
           display: 'flex',
           flexDirection: 'column',
@@ -192,53 +255,158 @@ function Profile({ user, onLogout, onClose, onProfileUpdate }) {
           marginBottom: '2rem'
         }}>
           <div style={{
-            width: '120px',
-            height: '120px',
+            position: 'relative',
+            width: '130px',
+            height: '130px',
             borderRadius: '50%',
-            background: darkMode ? '#2d2d44' : '#f0f0f0',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            overflow: 'hidden',
-            border: '4px solid #8B5CF6',
-            marginBottom: '1rem'
+            padding: '4px',
+            background: 'linear-gradient(135deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+            marginBottom: '0.75rem'
           }}>
-            {avatarUrl ? (
-              <img 
-                src={avatarUrl} 
-                alt="Avatar" 
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            <div style={{
+              width: '100%',
+              height: '100%',
+              borderRadius: '50%',
+              overflow: 'hidden',
+              background: darkMode ? '#0f0f1a' : '#f0f0f0',
+              border: '3px solid white'
+            }}>
+              {avatarUrl ? (
+                <img 
+                  src={avatarUrl} 
+                  alt="Profile" 
+                  style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    objectFit: 'cover',
+                    display: 'block'
+                  }}
+                />
+              ) : (
+                <div style={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: darkMode ? '#2d2d44' : '#e5e7eb'
+                }}>
+                  <span style={{ fontSize: '56px' }}>👤</span>
+                </div>
+              )}
+            </div>
+            
+            {/* Camera icon overlay */}
+            <label
+              htmlFor="avatar-upload"
+              style={{
+                position: 'absolute',
+                bottom: '4px',
+                right: '4px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                background: '#8B5CF6',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                transition: 'all 0.2s ease',
+                border: '2px solid white'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.transform = 'scale(1.1)'
+                e.target.style.background = '#7C3AED'
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.transform = 'scale(1)'
+                e.target.style.background = '#8B5CF6'
+              }}
+            >
+              <span style={{ fontSize: '18px' }}>📷</span>
+              <input
+                id="avatar-upload"
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarUpload}
+                style={{ display: 'none' }}
+                disabled={uploading}
               />
-            ) : (
-              <span style={{ fontSize: '48px' }}>👤</span>
-            )}
+            </label>
           </div>
-          
-          <label style={{
-            padding: '0.5rem 1.5rem',
-            background: '#8B5CF6',
-            color: 'white',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: '600',
-            transition: 'all 0.2s ease',
-            opacity: uploading ? 0.7 : 1
-          }}
-          onMouseEnter={(e) => e.target.style.background = '#7C3AED'}
-          onMouseLeave={(e) => e.target.style.background = '#8B5CF6'}
-          >
-            {uploading ? '⏳ Uploading...' : '📸 Change Photo'}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarUpload}
-              style={{ display: 'none' }}
-              disabled={uploading}
-            />
-          </label>
+
+          {uploading && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginTop: '0.5rem',
+              color: '#8B5CF6',
+              fontSize: '14px'
+            }}>
+              <span style={{
+                display: 'inline-block',
+                width: '16px',
+                height: '16px',
+                border: '2px solid rgba(139, 92, 246, 0.3)',
+                borderTop: '2px solid #8B5CF6',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite'
+              }} />
+              Uploading...
+            </div>
+          )}
+
+          <h3 style={{
+            fontSize: '20px',
+            fontWeight: '700',
+            color: darkMode ? '#e4e4e7' : '#1a1a2e',
+            margin: '0.5rem 0 0.25rem 0'
+          }}>
+            {fullName || user?.email?.split('@')[0] || 'Traveler'}
+          </h3>
+          <p style={{
+            fontSize: '13px',
+            color: darkMode ? '#7a8ba8' : '#6b7280'
+          }}>
+            {user?.email || ''}
+          </p>
         </div>
 
+        {/* Stats Row */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '0.5rem',
+          padding: '1rem',
+          background: darkMode ? '#0f0f1a' : '#f9fafb',
+          borderRadius: '12px',
+          marginBottom: '1.5rem',
+          border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : '#f0f0f0'}`
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: '24px', fontWeight: '700', color: '#8B5CF6' }}>
+              {tripStats.total}
+            </p>
+            <p style={{ fontSize: '13px', color: darkMode ? '#a1a1aa' : '#6b7280' }}>Trips</p>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: '24px', fontWeight: '700', color: '#8B5CF6' }}>
+              {tripStats.countries.length}
+            </p>
+            <p style={{ fontSize: '13px', color: darkMode ? '#a1a1aa' : '#6b7280' }}>Countries</p>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: '24px', fontWeight: '700', color: '#8B5CF6' }}>
+              ⭐
+            </p>
+            <p style={{ fontSize: '13px', color: darkMode ? '#a1a1aa' : '#6b7280' }}>Traveler</p>
+          </div>
+        </div>
+
+        {/* Edit Fields */}
         <div style={{ marginBottom: '1rem' }}>
           <label style={{
             display: 'block',
@@ -321,35 +489,6 @@ function Profile({ user, onLogout, onClose, onProfileUpdate }) {
           />
         </div>
 
-        <div className="profile-stats" style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-          gap: '1rem',
-          padding: '1rem',
-          background: darkMode ? '#0f0f1a' : '#f9fafb',
-          borderRadius: '12px',
-          marginBottom: '1.5rem'
-        }}>
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: '28px', fontWeight: '700', color: '#8B5CF6' }}>
-              {tripStats.total}
-            </p>
-            <p style={{ fontSize: '14px', color: darkMode ? '#a1a1aa' : '#6b7280' }}>Trips Planned</p>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: '28px', fontWeight: '700', color: '#8B5CF6' }}>
-              {tripStats.countries.length}
-            </p>
-            <p style={{ fontSize: '14px', color: darkMode ? '#a1a1aa' : '#6b7280' }}>Countries</p>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: '28px', fontWeight: '700', color: '#8B5CF6' }}>
-              {user?.email?.split('@')[0] || 'N/A'}
-            </p>
-            <p style={{ fontSize: '14px', color: darkMode ? '#a1a1aa' : '#6b7280' }}>Username</p>
-          </div>
-        </div>
-
         {message && (
           <div style={{
             padding: '0.75rem',
@@ -394,6 +533,13 @@ function Profile({ user, onLogout, onClose, onProfileUpdate }) {
           {saving ? '⏳ Saving...' : '💾 Save Profile'}
         </button>
       </div>
+
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   )
 }

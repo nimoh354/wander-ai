@@ -137,7 +137,43 @@ function Dashboard() {
   }, [])
 
   // ============================================================
-  // 2.3 HELPER FUNCTIONS
+  // 2.3 URL NAVIGATION HANDLER (🔴 ADDED THIS BLOCK)
+  // ============================================================
+  useEffect(() => {
+    // Only run this after loading is done to prevent race conditions
+    if (loading) return;
+
+    // Check URL parameters for navigation from navbar dropdown
+    const params = new URLSearchParams(window.location.search)
+    
+    if (params.get('profile') === 'true') {
+      setShowProfile(true)
+    }
+    if (params.get('savedLists') === 'true') {
+      setShowSavedLists(true)
+    }
+    if (params.get('tourPackages') === 'true') {
+      setShowTourPackages(true)
+    }
+    if (params.get('bookings') === 'true') {
+      setShowBookings(true)
+    }
+    if (params.get('stats') === 'true') {
+      setShowStats(true)
+    }
+    if (params.get('reviews') === 'true') {
+      setShowMyReviews(true)
+    }
+    
+    // Clean up URL parameters after reading so they don't persist on refresh
+    if (window.location.search) {
+      const newUrl = window.location.pathname
+      window.history.replaceState({}, document.title, newUrl)
+    }
+  }, [loading]) // 🔴 Dependency added
+
+  // ============================================================
+  // 2.4 HELPER FUNCTIONS
   // ============================================================
   
   const handleLogout = async () => {
@@ -322,7 +358,7 @@ function Dashboard() {
   }
 
   // ============================================================
-  // 2.4 LOADING SCREEN
+  // 2.5 LOADING SCREEN
   // ============================================================
   if (loading) {
     return (
@@ -350,7 +386,7 @@ function Dashboard() {
   }
 
   // ============================================================
-  // 2.5 PAGE VIEWS
+  // 2.6 PAGE VIEWS
   // ============================================================
 
   // ---- Page: Saved Lists ----
@@ -1132,7 +1168,7 @@ function Dashboard() {
   }
 
   // ============================================================
-  // 2.6 MAIN DASHBOARD
+  // 2.7 MAIN DASHBOARD
   // ============================================================
   return (
     <div>
